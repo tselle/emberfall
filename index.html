@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emberfall: The Hollow Vaults</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="title" class="screen active">
+  <div class="embers"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="titlebox">
+    <div class="kicker">A tactical fantasy role-playing adventure</div>
+    <h1>Emberfall</h1>
+    <div class="subtitle">The Hollow Vaults</div>
+    <div id="titleBtns" class="vbtns"></div>
+    <div class="fine">Second Edition rules · party of six · saves are kept in this browser</div>
+  </div>
+</div>
+
+<div id="assembly" class="screen">
+  <div class="panel">
+    <h1 class="small">Assemble Your Company</h1>
+    <div id="assemblyGold" class="gold"></div>
+    <div id="assemblyBody"></div>
+    <div id="assemblyBtns" class="hbtns"></div>
+  </div>
+</div>
+
+<div id="game" class="screen">
+  <div id="left">
+    <div id="hud">
+      <span id="hudLoc"></span><span id="hudDir"></span><span id="hudFace"></span>
+      <span class="spacer"></span><span id="hudTime"></span><span id="hudGold" class="gold"></span>
+    </div>
+    <div id="viewport">
+      <canvas id="view3d"></canvas>
+      <canvas id="combatCanvas"></canvas>
+    </div>
+    <div id="cmdhint"></div>
+    <div id="cmdbar"></div>
+    <div id="log"></div>
+  </div>
+  <div id="right">
+    <div id="party"></div>
+    <canvas id="minimap" width="250" height="210"></canvas>
+  </div>
+</div>
+
+<script src="js/rules.js"></script>
+<script src="js/data.js"></script>
+<script src="js/figures.js"></script>
+<script src="js/view3d.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/combat.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+'use strict';
+/* ============================================================
+   Game data: equipment, spells, monsters, maps, quests.
+   ============================================================ */
+
+/* t: w=melee weapon, r=missile weapon, a=armor, s=shield, g=ring, p=potion, q=quest item
+   cls: classes allowed (F P R M C T). sp = speed factor. dmg / dmgL = damage vs S-M / L. */
+const ITEMS = {
+  dagger:     { name: 'Dagger', t: 'w', dmg: '1d4', dmgL: '1d3', sp: 2, cost: 2, cls: 'FPRMT', dt: 'P' },
+  club:       { name: 'Club', t: 'w', dmg: '1d6', dmgL: '1d3', sp: 4, cost: 1, cls: 'FPRCT', dt: 'B' },
+  staff:      { name: 'Quarterstaff', t: 'w', dmg: '1d6', dmgL: '1d6', sp: 4, cost: 1, cls: 'FPRMCT', dt: 'B', hands: 2 },
+  handaxe:    { name: 'Hand Axe', t: 'w', dmg: '1d6', dmgL: '1d4', sp: 4, cost: 1, cls: 'FPR', dt: 'S' },
+  shortsword: { name: 'Short Sword', t: 'w', dmg: '1d6', dmgL: '1d8', sp: 3, cost: 10, cls: 'FPRT', dt: 'P' },
+  mace:       { name: 'Footman\'s Mace', t: 'w', dmg: '1d6+1', dmgL: '1d6', sp: 7, cost: 8, cls: 'FPRC', dt: 'B' },
+  hammer:     { name: 'War Hammer', t: 'w', dmg: '1d4+1', dmgL: '1d4', sp: 4, cost: 2, cls: 'FPRC', dt: 'B' },
+  flail:      { name: 'Footman\'s Flail', t: 'w', dmg: '1d6+1', dmgL: '2d4', sp: 7, cost: 15, cls: 'FPRC', dt: 'B' },
+  spear:      { name: 'Spear', t: 'w', dmg: '1d6', dmgL: '1d8', sp: 6, cost: 1, cls: 'FPR', dt: 'P' },
+  longsword:  { name: 'Long Sword', t: 'w', dmg: '1d8', dmgL: '1d12', sp: 5, cost: 15, cls: 'FPRT', dt: 'S' },
+  broadsword: { name: 'Broad Sword', t: 'w', dmg: '2d4', dmgL: '1d6+1', sp: 5, cost: 10, cls: 'FPRT', dt: 'S' },
+  battleaxe:  { name: 'Battle Axe', t: 'w', dmg: '1d8', dmgL: '1d8', sp: 7, cost: 5, cls: 'FPR', dt: 'S' },
+  morningstar:{ name: 'Morning Star', t: 'w', dmg: '2d4', dmgL: '1d6+1', sp: 7, cost: 10, cls: 'FPRC', dt: 'B' },
+  halberd:    { name: 'Halberd', t: 'w', dmg: '1d10', dmgL: '2d6', sp: 9, cost: 10, cls: 'FPR', dt: 'S', hands: 2 },
+  twohander:  { name: 'Two-Handed Sword', t: 'w', dmg: '1d10', dmgL: '3d6', sp: 10, cost: 50, cls: 'FPR', dt: 'S', hands: 2 },
+
+  sling:      { name: 'Sling & Bullets', t: 'r', dmg: '1d4+1', dmgL: '1d6+1', sp: 6, cost: 1, cls: 'FPRMCT', rof: 1, range: [5, 10, 20], dt: 'B' },
+  dart:       { name: 'Darts', t: 'r', dmg: '1d3', dmgL: '1d2', sp: 2, cost: 3, cls: 'FPRMT', rof: 3, range: [1, 2, 4], dt: 'P', thrown: true },
+  shortbow:   { name: 'Short Bow & Arrows', t: 'r', dmg: '1d6', dmgL: '1d6', sp: 7, cost: 33, cls: 'FPRT', rof: 2, range: [5, 10, 15], dt: 'P', bow: true },
+  longbow:    { name: 'Long Bow & Arrows', t: 'r', dmg: '1d8', dmgL: '1d8', sp: 8, cost: 78, cls: 'FPR', rof: 2, range: [5, 10, 17], dt: 'P', bow: true },
+  crossbow:   { name: 'Light Crossbow', t: 'r', dmg: '1d4', dmgL: '1d4', sp: 7, cost: 37, cls: 'FPR', rof: 1, range: [6, 12, 18], dt: 'P' },
+
+  leather:    { name: 'Leather Armor', t: 'a', ac: 8, cost: 5, cls: 'FPRCT' },
+  studded:    { name: 'Studded Leather', t: 'a', ac: 7, cost: 20, cls: 'FPRCT' },
+  scale:      { name: 'Scale Mail', t: 'a', ac: 6, cost: 120, cls: 'FPRC' },
+  chain:      { name: 'Chain Mail', t: 'a', ac: 5, cost: 75, cls: 'FPRC' },
+  splint:     { name: 'Splint Mail', t: 'a', ac: 4, cost: 80, cls: 'FPRC' },
+  banded:     { name: 'Banded Mail', t: 'a', ac: 4, cost: 200, cls: 'FPRC' },
+  plate:      { name: 'Plate Mail', t: 'a', ac: 3, cost: 600, cls: 'FPRC' },
+  shield:     { name: 'Shield', t: 's', cost: 10, cls: 'FPRC' },
+
+  potHeal:    { name: 'Potion of Healing', t: 'p', cost: 100, heal: '2d4+2' },
+  potExtra:   { name: 'Potion of Extra-Healing', t: 'p', cost: 300, heal: '3d8+3' },
+  antidote:   { name: 'Antivenom Draught', t: 'p', cost: 60, cure: 'poison' },
+
+  /* magic treasure (not sold in shops) */
+  longsword1: { name: 'Long Sword +1', base: 'longsword', t: 'w', dmg: '1d8', dmgL: '1d12', sp: 5, cost: 1500, cls: 'FPRT', dt: 'S', bonus: 1, magic: true },
+  shortsword1:{ name: 'Short Sword +1', base: 'shortsword', t: 'w', dmg: '1d6', dmgL: '1d8', sp: 3, cost: 1200, cls: 'FPRT', dt: 'P', bonus: 1, magic: true },
+  mace1:      { name: 'Mace +1', base: 'mace', t: 'w', dmg: '1d6+1', dmgL: '1d6', sp: 7, cost: 1200, cls: 'FPRC', dt: 'B', bonus: 1, magic: true },
+  dagger1:    { name: 'Dagger +1', base: 'dagger', t: 'w', dmg: '1d4', dmgL: '1d3', sp: 2, cost: 600, cls: 'FPRMT', dt: 'P', bonus: 1, magic: true },
+  staff1:     { name: 'Quarterstaff +1', base: 'staff', t: 'w', dmg: '1d6', dmgL: '1d6', sp: 4, cost: 800, cls: 'FPRMCT', dt: 'B', hands: 2, bonus: 1, magic: true },
+  shortbow1:  { name: 'Short Bow +1', base: 'shortbow', t: 'r', dmg: '1d6', dmgL: '1d6', sp: 7, cost: 1500, cls: 'FPRT', rof: 2, range: [5, 10, 15], dt: 'P', bow: true, bonus: 1, magic: true },
+  chain1:     { name: 'Chain Mail +1', t: 'a', ac: 5, bonus: 1, cost: 2000, cls: 'FPRC', magic: true },
+  leather1:   { name: 'Leather Armor +1', t: 'a', ac: 8, bonus: 1, cost: 1000, cls: 'FPRCT', magic: true },
+  shield1:    { name: 'Shield +1', t: 's', bonus: 1, cost: 1200, cls: 'FPRC', magic: true },
+  bracers6:   { name: 'Bracers of Defense AC 6', t: 'a', ac: 6, cost: 2000, magic: true },
+  ringProt:   { name: 'Ring of Protection +1', t: 'g', prot: 1, cost: 2000, magic: true },
+
+  ironKey:    { name: 'Iron Vault Key', t: 'q', cost: 0 },
+  reliquary:  { name: 'Dawn Reliquary', t: 'q', cost: 0 },
+};
+function item(id) {
+  if (!id) return null;
+  if (id.startsWith('scroll:')) { const s = SPELLS[id.slice(7)]; return { name: 'Scroll: ' + s.name, t: 'x', spell: id.slice(7), cost: 150 * s.l, magic: true }; }
+  return ITEMS[id] || null;
+}
+const SPEC_WEAPONS = ['longsword', 'broadsword', 'battleaxe', 'twohander', 'halberd', 'mace', 'morningstar', 'shortsword', 'spear', 'flail'];
+
+const SHOPS = {
+  armory: ['dagger', 'club', 'staff', 'handaxe', 'hammer', 'shortsword', 'mace', 'spear', 'flail', 'broadsword', 'morningstar', 'longsword', 'battleaxe', 'halberd', 'twohander',
+           'sling', 'dart', 'shortbow', 'longbow', 'crossbow', 'leather', 'studded', 'chain', 'splint', 'scale', 'banded', 'plate', 'shield'],
+  apothecary: ['potHeal', 'potExtra', 'antidote'],
+};
+
+/* ---- Spells. c: class (M/C), l: spell level, tgt: enemy|ally|self|area|party|cone|line|none.
+   range in combat squares (1 square = 10 ft), 1 = touch. r = area radius. camp = castable out of combat. ---- */
+const SPELLS = {
+  magicMissile: { name: 'Magic Missile', c: 'M', l: 1, tgt: 'enemy', range: 20, desc: 'Unerring bolts: 1d4+1 damage each, one missile per two caster levels (max 5).' },
+  sleep:        { name: 'Sleep', c: 'M', l: 1, tgt: 'area', range: 9, r: 1.5, desc: 'Puts 2d4 Hit Dice of creatures to sleep (weakest first; none above 4+3 HD). No saving throw. Affects friends in the area!' },
+  burningHands: { name: 'Burning Hands', c: 'M', l: 1, tgt: 'cone', range: 1, desc: 'Fan of flame on adjacent foes: 1d3 + 2/level damage, save for half.' },
+  armor:        { name: 'Armor', c: 'M', l: 1, tgt: 'ally', range: 1, camp: true, desc: 'Touch: grants AC 6 until 8 + level points of damage are absorbed.' },
+  shield:       { name: 'Shield', c: 'M', l: 1, tgt: 'self', range: 0, desc: 'AC 2 vs. missiles, AC 4 vs. melee; negates Magic Missile. 5 rounds/level.' },
+  stinkingCloud:{ name: 'Stinking Cloud', c: 'M', l: 2, tgt: 'area', range: 3, r: 1.5, desc: 'Nauseating vapors: save vs. poison or be helpless for 1d4+1 rounds.' },
+  mirrorImage:  { name: 'Mirror Image', c: 'M', l: 2, tgt: 'self', range: 0, desc: 'Creates 1d4 (+1 per 3 levels) illusory duplicates that absorb attacks.' },
+  strength:     { name: 'Strength', c: 'M', l: 2, tgt: 'ally', range: 1, camp: true, desc: 'Touch: raises Strength (1d8 warriors, 1d6 rogues/priests, 1d4 wizards) for 1 hour/level.' },
+  knock:        { name: 'Knock', c: 'M', l: 2, tgt: 'none', range: 0, explore: true, desc: 'Opens a locked or stuck door. Cast it when facing a locked door.' },
+  fireball:     { name: 'Fireball', c: 'M', l: 3, tgt: 'area', range: 12, r: 2.3, desc: 'Explosion: 1d6 damage per level, save for half. Burns friend and foe alike.' },
+  lightningBolt:{ name: 'Lightning Bolt', c: 'M', l: 3, tgt: 'line', range: 8, desc: 'A stroke of lightning 8 squares long: 1d6 per level, save for half.' },
+  haste:        { name: 'Haste', c: 'M', l: 3, tgt: 'party', range: 0, desc: 'One ally per level moves and attacks at double speed for 3 + level rounds.' },
+  holdPerson:   { name: 'Hold Person', c: 'M', l: 3, tgt: 'enemy', range: 12, desc: 'Holds 1-4 humanoids rigid for 2 rounds/level. Save vs. spell negates.' },
+
+  cureLight:    { name: 'Cure Light Wounds', c: 'C', l: 1, tgt: 'ally', range: 1, camp: true, desc: 'Touch: heals 1d8 hit points.' },
+  bless:        { name: 'Bless', c: 'C', l: 1, tgt: 'party', range: 0, desc: 'Allies gain +1 to hit for 6 rounds.' },
+  protEvil:     { name: 'Protection From Evil', c: 'C', l: 1, tgt: 'ally', range: 1, desc: 'Touch: evil attackers suffer -2 to hit; +2 to saves. 3 rounds/level.' },
+  holdPersonC:  { name: 'Hold Person', c: 'C', l: 2, tgt: 'enemy', range: 12, desc: 'Holds 1-3 humanoids rigid for 2 rounds/level. Save vs. spell negates.' },
+  aid:          { name: 'Aid', c: 'C', l: 2, tgt: 'ally', range: 1, desc: 'Touch: +1 to hit and saves, and 1d8 bonus hit points for 1 round + 1/level.' },
+  slowPoison:   { name: 'Slow Poison', c: 'C', l: 2, tgt: 'ally', range: 1, camp: true, desc: 'Touch: halts poison coursing through a victim before it takes its toll.' },
+  silence:      { name: 'Silence 15\' Radius', c: 'C', l: 2, tgt: 'area', range: 12, r: 1.5, desc: 'Enemy spellcasters in the area must save vs. spell or be unable to cast for 2 rounds/level.' },
+  prayer:       { name: 'Prayer', c: 'C', l: 3, tgt: 'party', range: 0, desc: 'Allies gain +1 and foes suffer -1 to attacks, damage and saves for 1 round/level.' },
+  dispelMagic:  { name: 'Dispel Magic', c: 'C', l: 3, tgt: 'area', range: 6, r: 1.5, desc: 'Strips magical effects in the area: frees held or sleeping allies, removes enemy wards.' },
+  removeParalysis: { name: 'Remove Paralysis', c: 'C', l: 3, tgt: 'area', range: 2, r: 2.3, desc: 'Frees up to 1d4 paralyzed or held allies in the area.' },
+};
+
+/* ---- Monsters (statistics per the 2nd Edition Monstrous Manual) ----
+   fig: procedural figure description used by the renderer */
+const MONSTERS = {
+  rat:      { name: 'Giant Rat', hd: 0.5, hp: '1d4', ac: 7, mv: 12, thac0: 20, atk: ['1d3'], size: 'T', ml: 6, xp: 15, gold: '0', tags: ['animal'],
+              fig: { type: 'rat', body: '#6b5a4c' } },
+  kobold:   { name: 'Kobold', hd: 0.5, hp: '1d4', ac: 7, mv: 6, thac0: 20, atk: ['1d6'], size: 'S', ml: 9, xp: 7, gold: '2d4', tags: ['kobold', 'person', 'evil'],
+              fig: { s: 0.72, skin: '#a0522d', body: '#5c4033', head: 'snout', wpn: 'spear' } },
+  goblin:   { name: 'Goblin', hd: 0.9, hp: '1d8-1', ac: 6, mv: 6, thac0: 20, atk: ['1d6'], size: 'S', ml: 10, xp: 15, gold: '2d6', tags: ['goblin', 'person', 'evil'],
+              fig: { s: 0.78, skin: '#7da04a', body: '#6b4a2e', head: 'ears', wpn: 'sword', shield: true } },
+  slinger:  { name: 'Goblin Slinger', hd: 0.9, hp: '1d8-1', ac: 7, mv: 6, thac0: 20, atk: ['1d4'], size: 'S', ml: 9, xp: 15, gold: '2d6', tags: ['goblin', 'person', 'evil'],
+              ranged: { dmg: '1d4+1', rof: 1, range: [5, 10, 20] }, fig: { s: 0.78, skin: '#7da04a', body: '#4d5a2e', head: 'ears', wpn: 'dagger' } },
+  chief:    { name: 'Redfang Chieftain', hd: 2, hp: '14', ac: 4, mv: 6, thac0: 19, atk: ['2d4'], size: 'S', ml: 13, xp: 65, gold: '4d10', tags: ['goblin', 'person', 'evil'], leader: true,
+              fig: { s: 0.92, skin: '#8fae4f', body: '#8a2b2b', head: 'horns', wpn: 'axe', shield: true } },
+  orc:      { name: 'Orc', hd: 1, hp: '1d8', ac: 6, mv: 9, thac0: 19, atk: ['1d8'], size: 'M', ml: 11, xp: 15, gold: '2d8', tags: ['orc', 'person', 'evil'],
+              fig: { s: 1, skin: '#6f7f5a', body: '#4a4238', head: 'tusks', wpn: 'axe', shield: true } },
+  hobgoblin:{ name: 'Hobgoblin', hd: 1.1, hp: '1d8+1', ac: 5, mv: 9, thac0: 19, atk: ['1d8'], size: 'M', ml: 11, xp: 35, gold: '3d8', tags: ['goblin', 'person', 'evil'],
+              fig: { s: 1.02, skin: '#b5651d', body: '#3d3d55', head: 'helm', wpn: 'sword', shield: true } },
+  gnoll:    { name: 'Gnoll', hd: 2, hp: '2d8', ac: 5, mv: 9, thac0: 19, atk: ['2d4'], size: 'L', ml: 11, xp: 35, gold: '3d8', tags: ['gnoll', 'person', 'evil', 'giantkin'],
+              fig: { s: 1.18, skin: '#9a7b4f', body: '#5b4a3a', head: 'snout', wpn: 'spear' } },
+  ogre:     { name: 'Ogre', hd: 4.1, hp: '4d8+1', ac: 5, mv: 9, thac0: 17, atk: ['1d10'], size: 'L', ml: 12, xp: 270, gold: '8d10', tags: ['ogre', 'evil', 'giantkin', 'bigfolk'], leader: true,
+              fig: { s: 1.45, skin: '#c2a25a', body: '#6b4f2e', head: 'tusks', wpn: 'club' } },
+  spider:   { name: 'Large Spider', hd: 1.1, hp: '1d8+1', ac: 8, mv: 6, thac0: 19, atk: ['1'], size: 'S', ml: 7, xp: 175, gold: '0', tags: ['animal'], poison: { mod: 2, dmg: 15 },
+              fig: { type: 'spider', body: '#2e2a33' } },
+  skeleton: { name: 'Skeleton', hd: 1, hp: '1d8', ac: 7, mv: 12, thac0: 19, atk: ['1d6'], size: 'M', ml: 20, xp: 65, gold: '0', tags: ['undead', 'evil', 'mindless'], undead: 'skeleton', halfEdged: true,
+              fig: { s: 1, skin: '#e8e2cf', body: '#d9d2bb', legs: '#cfc8b0', head: 'skull', wpn: 'sword', thin: true } },
+  zombie:   { name: 'Zombie', hd: 2, hp: '2d8', ac: 8, mv: 6, thac0: 19, atk: ['1d8'], size: 'M', ml: 20, xp: 65, gold: '0', tags: ['undead', 'evil', 'mindless'], undead: 'zombie', slow: true,
+              fig: { s: 1.02, skin: '#7f9a86', body: '#4f4a45', head: 'bare', wpn: 'claws' } },
+  ghoul:    { name: 'Ghoul', hd: 2, hp: '2d8', ac: 6, mv: 9, thac0: 19, atk: ['1d3', '1d3', '1d6'], size: 'M', ml: 12, xp: 175, gold: '2d10', tags: ['undead', 'evil'], undead: 'ghoul', paralyze: true,
+              fig: { s: 1, skin: '#b9a7c9', body: '#3b3340', head: 'bare', wpn: 'claws', hunch: true } },
+  thug:     { name: 'Cutthroat', hd: 0.9, hp: '1d6', ac: 8, mv: 12, thac0: 20, atk: ['1d6'], size: 'M', ml: 8, xp: 15, gold: '3d10', tags: ['human', 'person', 'evil'],
+              fig: { s: 1, skin: '#d8a47f', body: '#3a3a3a', head: 'hood', wpn: 'dagger' } },
+  cultist:  { name: 'Ashen Cultist', hd: 1, hp: '1d8', ac: 7, mv: 12, thac0: 20, atk: ['1d6+1'], size: 'M', ml: 14, xp: 15, gold: '2d10', tags: ['human', 'person', 'evil'],
+              fig: { s: 1, skin: '#c9b8a8', body: '#4a4a50', head: 'hood', wpn: 'mace', robe: true } },
+  adept:    { name: 'Ashen Adept', hd: 3, hp: '3d8', ac: 4, mv: 12, thac0: 20, atk: ['1d6+1'], size: 'M', ml: 14, xp: 175, gold: '6d10', tags: ['human', 'person', 'evil'], clvl: 3,
+              spells: ['holdPersonC'], fig: { s: 1, skin: '#c9b8a8', body: '#6a2f3a', head: 'hood', wpn: 'mace', shield: true, robe: true } },
+  malvek:   { name: 'Malvek the Ashen', hd: 5, hp: '18', ac: 5, mv: 12, thac0: 19, atk: ['1d4+1'], size: 'M', ml: 16, xp: 975, gold: '0', tags: ['human', 'person', 'evil'], clvl: 5, leader: true,
+              spells: ['mirrorImage', 'stinkingCloud', 'magicMissile', 'holdPerson', 'magicMissile', 'burningHands'],
+              fig: { s: 1.08, skin: '#d0c4c4', body: '#3a2a55', head: 'crown', wpn: 'staff', robe: true, glow: '#b07cff' } },
+};
+
+/* ---- Maps ----
+   # stone wall  H timbered wall  B brick wall  G gate  D door  L locked door  S secret door
+   . floor  , grass  T tree  F fountain  < > stairs  1-9 town buildings  a-z events */
+const MAPS = {
+  town: {
+    name: 'Emberfall', outdoor: true, wall: 'stone', floor: 'cobble', safe: true,
+    grid: [
+      '#########################',
+      '#TT,,,,,,,,B>B,,,,,,,,dT#',
+      '#T,,,,,,,,,BaB,,,,,,,c,T#',
+      '#,,HHHHH,,,,.,,,BBBBBBB,#',
+      '#,,HHHHH,,,,.,,,BBBBBBB,#',
+      '#,,HH5HH,,,,.,,,BBB6BBB,#',
+      '#.......................#',
+      '#.HHHH.,T,,,.,,,T,.BBBB.#',
+      '#.HHHH.,,.......,,.BBBB.#',
+      '#.HHH3.............4BBB.#',
+      '#.HHHH......F......BBBB.#',
+      '#.HHHH.,,.......,,.BB7B.#',
+      '#......,T,,,.,,,T,......#',
+      '#.......................#',
+      '#,,HH1HH,,,,.,,,HH2HHHH,#',
+      '#,,HHHHH,,,,.,,,HHHHHHH,#',
+      '#,,HHHHH,,,,.,,,HHHHHHH,#',
+      '#,T,,,,,,T,,.,,T,,,,,,,,#',
+      '#,,,,,,,,,,,.,,,,,,,,,,,#',
+      '#TT,,,,,,,,,.,,,,,,,,,TT#',
+      '############G############',
+    ],
+    start: { x: 12, y: 19, dir: 0 },
+    stairs: { '>': { map: 'crypt1', x: 12, y: 1, dir: 2 } },
+    locs: { 1: 'inn', 2: 'armory', 3: 'tavern', 4: 'apothecary', 5: 'temple', 6: 'hall', 7: 'training' },
+    ev: {
+      a: { type: 'text', once: true, text: 'Weathered steps descend beneath the broken arch of the Abbey of the Dawn. Cold air breathes up from the dark, carrying the smell of old smoke.' },
+      c: { type: 'enc', mons: [['thug', 4]], arena: 'street', text: 'Hooded figures peel away from the wall of the town hall. "Wrong alley, heroes. Purses on the ground."' },
+      d: { type: 'chest', gold: 60, items: ['potHeal'], text: 'Behind a loose stone the cutthroats kept their takings.' },
+    },
+  },
+  crypt1: {
+    name: 'Abbey Undercroft', wall: 'dungeon', floor: 'flag', ceil: 'vault', wander: { chance: 0.035, table: [['rat', '2d3'], ['kobold', '2d3+1'], ['goblin', '1d3+2'], ['orc', '1d3+1']] }, arena: 'dungeon',
+    grid: [
+      '#########################',
+      '##.....###..<..##......##',
+      '##.....###.....##......##',
+      '##..b..###.....##..d...##',
+      '##.....Sh#..a..##......##',
+      '##...c.###.....##....i.##',
+      '##.....#####D####......##',
+      '####D#######.######D#####',
+      '####.#######.######.#####',
+      '####.#######.######.#####',
+      '##.....................##',
+      '#####D######.######D#####',
+      '##.......###.###.......##',
+      '##.......###.###.......##',
+      '##...e...###.###...g...##',
+      '##.......###L###.......##',
+      '##.....f.#.....#.......##',
+      '##.......#.....#.......##',
+      '##########..>..##########',
+      '##########.....##########',
+      '#########################',
+    ],
+    stairs: { '<': { map: 'town', x: 12, y: 2, dir: 2 }, '>': { map: 'crypt2', x: 12, y: 18, dir: 0 } },
+    lockText: 'A door of black iron bars the way south. Its lock is the size of a fist.',
+    ev: {
+      a: { type: 'enc', mons: [['goblin', 4], ['slinger', 1]], text: 'Torchlight flares ahead. Goblin sentries wearing red-daubed fangs on thongs shriek an alarm and charge!' },
+      b: { type: 'enc', mons: [['rat', 7]], text: 'The rotting grain sacks heave. A tide of giant rats pours out, eyes glittering.' },
+      c: { type: 'chest', gold: 45, items: ['potHeal'], text: 'Among the split sacks sits a monk\'s strongbox, its hasp rusted through.' },
+      d: { type: 'enc', mons: [['kobold', 8]], text: 'This was the abbey scriptorium. Now kobolds nest in the shredded books, and they do not welcome visitors.' },
+      e: { type: 'enc', mons: [['chief', 1], ['hobgoblin', 1], ['goblin', 4], ['slinger', 1]], quest: 'redfang', text: 'On a throne of stacked pews lounges the Redfang chieftain. He points a notched axe at you and bellows for blood.' },
+      f: { type: 'chest', gold: 320, items: ['shield1', 'scroll:stinkingCloud'], text: 'The chieftain\'s hoard: plunder from a dozen farmsteads.' },
+      g: { type: 'enc', mons: [['ogre', 1], ['orc', 2]], items: ['ironKey'], text: 'Something huge shifts in the gloom. An ogre rises from a bed of hides, an iron key hanging from its neck like a charm.' },
+      h: { type: 'chest', gold: 150, items: ['longsword1', 'potHeal'], text: 'A hidden reliquary niche! The monks sealed their treasures here before the abbey fell.' },
+      i: { type: 'chest', gold: 70, items: ['dagger1'], trap: { dmg: '1d6', text: 'A needle springs from the lock!' }, text: 'The kobolds piled their shiny things in an iron-bound coffer.' },
+    },
+  },
+  crypt2: {
+    name: 'The Hollow Vaults', wall: 'crypt', floor: 'cryptfloor', ceil: 'vault', wander: { chance: 0.04, table: [['skeleton', '1d3+1'], ['zombie', '1d3+1'], ['cultist', '1d3+2'], ['skeleton', '1d4+2'], ['ghoul', '1d2']] }, arena: 'crypt',
+    grid: [
+      '#########################',
+      '#########################',
+      '########....k....########',
+      '########.........########',
+      '########....j....########',
+      '##.....#.........#.....##',
+      '##..e..#.........#..g..##',
+      '##.....#.........#.....##',
+      '##.f...#####D#####...h.##',
+      '##.....#####.#####.....##',
+      '##.....#####i#####.....##',
+      '####D#######.#######D####',
+      '##.....................##',
+      '####D#######.#######D####',
+      '##.....#####.#####.....##',
+      '##..a..#####D#####..c..##',
+      '##.....###.....###.....##',
+      '##.b...###.....###...d.##',
+      '##.....###..<..###.....##',
+      '##########.....##########',
+      '#########################',
+    ],
+    stairs: { '<': { map: 'crypt1', x: 12, y: 18, dir: 0 } },
+    ev: {
+      a: { type: 'enc', mons: [['skeleton', 5]], text: 'Bones are stacked to the ceiling in this ossuary. Five heaps rattle, assemble, and stand.' },
+      b: { type: 'chest', gold: 180, items: ['mace1', 'potHeal'], text: 'An abbot\'s sarcophagus, its lid already ajar.' },
+      c: { type: 'enc', mons: [['spider', 4]], text: 'Webs thick as sailcloth drape the dry cistern. Dog-sized spiders descend on glistening threads.' },
+      d: { type: 'chest', gold: 140, items: ['antidote', 'shortbow1', 'scroll:mirrorImage'], text: 'A silk-wrapped corpse still clutches a satchel.' },
+      e: { type: 'enc', mons: [['ghoul', 3]], text: 'The Shrine of the Dawn is defiled. Hunched things look up from their feast, grave-dirt on their claws.' },
+      f: { type: 'chest', gold: 100, items: ['reliquary', 'potExtra'], quest: 'reliquary', text: 'Beneath the toppled altar gleams a casket of gold and amber: the Dawn Reliquary!' },
+      g: { type: 'enc', mons: [['adept', 1], ['cultist', 4]], text: 'Grey-robed figures kneel around a brazier of ashes. "The Circle is not to be disturbed," their leader hisses.' },
+      h: { type: 'chest', gold: 260, items: ['chain1', 'scroll:fireball', 'potHeal'], trap: { dmg: '2d4', text: 'A blade scythes out of the lid!' }, text: 'The cult\'s war chest, bound in grey iron.' },
+      i: { type: 'enc', mons: [['zombie', 4]], text: 'Four dead monks stand shoulder to shoulder across the passage. Their heads turn as one.' },
+      j: { type: 'enc', mons: [['malvek', 1], ['skeleton', 4], ['adept', 1]], quest: 'malvek', items: ['ringProt', 'bracers6', 'staff1'], arena: 'sanctum',
+           text: 'Ash drifts like snow in the sanctum. A gaunt man in violet robes turns from a circle of bones. "More clay for my hands," says Malvek the Ashen. "Rise, my children."' },
+      k: { type: 'chest', gold: 900, items: ['potExtra', 'scroll:lightningBolt', 'scroll:haste'], text: 'Malvek\'s coffers, heavy with the wealth of the dead.' },
+    },
+  },
+};
+
+const QUESTS = {
+  redfang:   { name: 'Rout the Redfangs', gold: 250, xp: 750,
+               offer: 'Goblins of the Redfang tribe have taken the abbey undercroft and raid our farms by night. Kill their chieftain and the rest will scatter.',
+               done: 'The Redfang chieftain is dead? Then Emberfall sleeps easier tonight. Your payment, as promised.' },
+  reliquary: { name: 'The Dawn Reliquary', gold: 500, xp: 1500, needItem: 'reliquary',
+               offer: 'Below the undercroft lie the Hollow Vaults, and in them the shrine where the Dawn Reliquary was kept. The dead walk there now. Bring the relic home.',
+               done: 'By the light... you carried it out. The temple will ring its bells for you. Take this with the gratitude of the town.' },
+  malvek:    { name: 'The Ashen Circle', gold: 1500, xp: 3000,
+               offer: 'We have a name at last: Malvek the Ashen, a necromancer who raises the abbey\'s dead in a sanctum at the heart of the Vaults. End him, and end this.',
+               done: 'Malvek is destroyed and the dead lie quiet. Emberfall owes you everything it has. You will always have a home here, heroes.' },
+};
+const QUEST_ORDER = ['redfang', 'reliquary', 'malvek'];
+
+const RUMORS = [
+  'Old Bram swears the monks walled up their valuables before the abbey fell. "Search the storeroom walls," he says, tapping his nose.',
+  'A caravan guard mutters: "Ghoul gets its claws in you, you freeze stiff as a plank. Elves don\'t, mind. Never understood that."',
+  'The barkeep leans in. "Swords just rattle between a skeleton\'s ribs. Take a mace, or a priest."',
+  '"The ogre in the undercroft wears a key round its neck," says a scarred mercenary. "Saw it myself. Then I ran."',
+  'A hedge-wizard slurs into his cup: "Sleep. Always memorize Sleep. Useless on the dead, though. Ask me how I know."',
+  '"Spider bit my cousin down there. He walked out fine, laughing. Dropped dead at supper. Buy the antivenom."',
+  'A grey-robed stranger was asking the price of grave plots last month. Nobody has seen the gravedigger since.',
+  '"Trainers at the hall won\'t teach you a thing until you\'ve earned it, and then they charge you for the privilege."',
+  'The serving girl whispers that cutthroats lurk in the alley behind the town hall, in the north-east corner of town.',
+  '"Rest in that dungeon and something will find you. Sleep at the Lantern instead. Costs less than a funeral."',
+];
+
+/* Ready-made adventurers so a party can be fielded immediately */
+function makePregens() {
+  const mk = (name, race, cls, align, st, color, eq, inv, extra) => {
+    const ch = newCharacter(Object.assign({ name, race, cls, align, color, stats: Object.assign({ strx: 0 }, st) }, extra || {}));
+    Object.assign(ch.eq, eq); ch.inv = inv || []; ch.pregen = true;
+    return ch;
+  };
+  return [
+    mk('Aldric Thorne', 'human', 'F', 'NG', { str: 17, dex: 12, con: 16, int: 10, wis: 11, cha: 12 }, '#b03a2e', { weapon: 'longsword', armor: 'chain', shield: 'shield' }, [], { spec: 'longsword' }),
+    mk('Seraphine Vale', 'human', 'P', 'LG', { str: 16, dex: 10, con: 14, int: 11, wis: 14, cha: 17 }, '#d4ac0d', { weapon: 'broadsword', armor: 'chain', shield: 'shield' }, []),
+    mk('Borin Stonehand', 'dwarf', 'C', 'LG', { str: 14, dex: 9, con: 17, int: 10, wis: 16, cha: 9 }, '#2e86c1', { weapon: 'mace', armor: 'chain', shield: 'shield', ranged: 'sling' }, []),
+    mk('Lyra Windwhisper', 'halfelf', 'R', 'CG', { str: 15, dex: 16, con: 14, int: 12, wis: 14, cha: 11 }, '#1e8449', { weapon: 'longsword', armor: 'studded', ranged: 'longbow' }, [], { foe: 'goblin' }),
+    mk('Pip Quickfinger', 'halfling', 'T', 'N', { str: 10, dex: 18, con: 13, int: 12, wis: 9, cha: 13 }, '#7d6608', { weapon: 'shortsword', armor: 'leather', ranged: 'sling' }, []),
+    mk('Elowen Starfall', 'elf', 'M', 'NG', { str: 8, dex: 16, con: 10, int: 17, wis: 12, cha: 13 }, '#6c3483', { weapon: 'staff', ranged: 'dart' }, []),
+  ];
+}
