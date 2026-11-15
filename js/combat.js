@@ -13,6 +13,11 @@ const Combat = (() => {
     crypt:   { a: '#474d5c', edge: '#1c1f28', block: '#666d80', bg0: '#141722', bg1: '#040508' },
     street:  { a: '#6b6860', edge: '#2e2c28', block: '#7a5a38', bg0: '#232a3d', bg1: '#0a0c14' },
     sanctum: { a: '#4b3f5e', edge: '#1d1728', block: '#6d5c8a', bg0: '#1d1530', bg1: '#06040b' },
+    plains:  { a: '#6a7f45', edge: '#4c5e31', block: '#8a8576', bg0: '#3d5a78', bg1: '#141c26', out: true, obs: ['rock', 'bush', 'bush'], n: [2, 4], tuft: '#88a358' },
+    road:    { a: '#6a7f45', edge: '#4c5e31', block: '#8a8576', bg0: '#3d5a78', bg1: '#141c26', out: true, obs: ['rock', 'bush'], n: [1, 3], tuft: '#88a358', path: true },
+    forest:  { a: '#4d6b39', edge: '#344b26', block: '#7a7468', bg0: '#1f3524', bg1: '#070d08', out: true, obs: ['tree', 'tree', 'tree', 'bush'], n: [6, 10], tuft: '#6c8f45', spread: true },
+    hills:   { a: '#7c7a4e', edge: '#5a5836', block: '#8e8a7c', bg0: '#4a5a6e', bg1: '#161a20', out: true, obs: ['rock', 'rock', 'bush'], n: [4, 7], tuft: '#98965c', spread: true },
+    swamp:   { a: '#4e5a3c', edge: '#36402a', block: '#6b6a5c', bg0: '#2a3326', bg1: '#080a07', out: true, obs: ['reed', 'reed', 'tree'], n: [4, 7], tuft: '#5f7040', pools: true, spread: true },
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const cheb = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
@@ -45,9 +50,18 @@ const Combat = (() => {
   }
   function setup(spec) {
     S = { w: 14, h: 10, units: [], fx: [], corpses: [], round: 0, cur: null, mode: null, busy: false, auto: false, xp: 0, prayer: {},
-          theme: THEMES[spec.arena] || THEMES.dungeon, hover: null, reach: null, order: [], done: false };
-    S.grid = new Uint8Array(S.w * S.h);
-    for (let i = 0, n = 3 + rnd(4); i < n; i++) S.grid[key(5 + Math.floor(Math.random() * 4), Math.floor(Math.random() * S.h))] = 1 + Math.floor(Math.random() * 3);
+          theme: THEMES[spec.arena] || THEMES.dungeon, hover: null, reach: null, order: [], done: false, surprise: spec.surprise || null, night: !!spec.night };
+    S.grid = new Uint8Array(S.w * S.h); S.obs = {};
+    const th = S.theme;
+    if (th.out) {
+      // outdoor cover: trees, rocks, brush or reeds scattered across the field
+      const n = th.n[0] + Math.floor(Math.random() * (th.n[1] - th.n[0] + 1));
+      for (let i = 0, tries = 0; i < n && tries < 200; tries++) {
+        const x = th.spread ? 4 + Math.floor(Math.random() * 6) + (Math.random() < 0.3 ? (Math.random() < 0.5 ? -3 : 3) : 0) : 5 + Math.floor(Math.random() * 4), y = Math.floor(Math.random() * S.h);
+        if (!inb(x, y) || S.grid[key(x, y)] || x <= 3 || x >= 10) continue;
+        S.grid[key(x, y)] = 1; S.obs[key(x, y)] = { kind: pick(th.obs), ph: Math.random() * 6, s: 0.85 + Math.random() * 0.3 }; i++;
+      }
+    } else for (let i = 0, n = 3 + rnd(4); i < n; i++) S.grid[key(5 + Math.floor(Math.random() * 4), Math.floor(Math.random() * S.h))] = 1 + Math.floor(Math.random() * 3);
     const pslots = [[3, 4], [3, 5], [3, 3], [1, 4], [1, 5], [1, 3]];
     spec.party.filter(ch => ch.hp > 0 && !ch.dead).forEach((ch, i) => S.units.push(mkPC(ch, pslots[i][0], pslots[i][1])));
     const list = [];
@@ -81,11 +95,54 @@ const Combat = (() => {
       diamond(g, x, y); g.fillStyle = shade(th.a, (Math.random() - 0.5) * 0.14 + ((x + y) % 2 ? -0.03 : 0.03)); g.fill();
       g.strokeStyle = th.edge; g.lineWidth = 1; g.stroke();
     }
+    if (th.out) outdoorFloor(g, th);
     // soft light pool
     const lg = g.createRadialGradient(CW / 2, CH / 2 + 10, 40, CW / 2, CH / 2 + 10, 480);
     lg.addColorStop(0, 'rgba(255,220,160,.10)'); lg.addColorStop(1, 'rgba(0,0,0,.28)');
     g.fillStyle = lg; g.fillRect(0, 0, CW, CH);
+    if (S.night) { g.fillStyle = 'rgba(10,18,48,.42)'; g.fillRect(0, 0, CW, CH); }
     S.floor = f;
+  }
+  function outdoorFloor(g, th) {
+    // worn path across the field, puddles, grass tufts and pebbles (drawn once into the floor bitmap)
+    if (th.path) for (let x = 0; x < S.w; x++) for (const y of [4, 5]) { diamond(g, x, y, 4); g.fillStyle = 'rgba(150,125,85,' + (0.45 + Math.random() * 0.2) + ')'; g.fill(); }
+    if (th.pools) for (let i = 0; i < 6; i++) {
+      const x = 2 + Math.floor(Math.random() * 10), y = Math.floor(Math.random() * S.h);
+      if (S.grid[key(x, y)]) continue;
+      const [sx, sy] = scr(x, y);
+      g.fillStyle = 'rgba(30,48,52,.75)'; g.beginPath(); g.ellipse(sx, sy, HW * 0.7, HH * 0.6, 0, 0, 6.3); g.fill();
+      g.strokeStyle = 'rgba(160,190,180,.25)'; g.lineWidth = 1; g.beginPath(); g.ellipse(sx - 4, sy - 2, HW * 0.4, HH * 0.3, 0, 3.4, 5.4); g.stroke();
+    }
+    for (let i = 0; i < 520; i++) {
+      const x = Math.random() * S.w, y = Math.random() * S.h, [sx, sy] = scr(x - 0.5, y - 0.5);
+      if (Math.random() < 0.82) {
+        g.strokeStyle = shade(th.tuft, (Math.random() - 0.5) * 0.4); g.lineWidth = 1.2;
+        g.beginPath(); for (let k = -1; k <= 1; k++) { g.moveTo(sx + k * 2, sy); g.lineTo(sx + k * 3.5 + (Math.random() - 0.5) * 2, sy - 4 - Math.random() * 4); } g.stroke();
+      } else { g.fillStyle = Math.random() < 0.5 ? 'rgba(200,190,170,.5)' : (Math.random() < 0.5 ? '#e8d77a' : '#c9a6e0'); g.beginPath(); g.arc(sx, sy, 1.4, 0, 6.3); g.fill(); }
+    }
+  }
+  function drawObstacle(x, y, o) {
+    const [sx, sy] = scr(x, y), s = o.s;
+    c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(sx + 5, sy + 3, HW * 0.75 * s, HH * 0.75 * s, 0, 0, 6.3); c.fill();
+    c.strokeStyle = 'rgba(10,12,8,.6)'; c.lineWidth = 1;
+    if (o.kind === 'tree') {
+      c.fillStyle = '#5a4030'; c.fillRect(sx - 3, sy - 26 * s, 6, 26 * s);
+      const cols = S.theme.pools ? ['#3e4b2c', '#4f5d37', '#5f6e43'] : ['#24452a', '#2f5a34', '#3c6e3f'];
+      for (let i = 0; i < 3; i++) { const w = (24 - i * 6) * s, top = sy - (26 + i * 15) * s; c.fillStyle = cols[i]; c.beginPath(); c.moveTo(sx - w, top + 6); c.lineTo(sx, top - 24 * s); c.lineTo(sx + w, top + 6); c.closePath(); c.fill(); c.stroke(); }
+    } else if (o.kind === 'rock') {
+      const col = S.theme.block;
+      c.fillStyle = shade(col, -0.3); c.beginPath(); c.moveTo(sx - 24 * s, sy + 2); c.lineTo(sx - 18 * s, sy - 16 * s); c.lineTo(sx - 2, sy - 24 * s); c.lineTo(sx + 2, sy + 9 * s); c.closePath(); c.fill(); c.stroke();
+      c.fillStyle = shade(col, -0.05); c.beginPath(); c.moveTo(sx - 2, sy - 24 * s); c.lineTo(sx + 14 * s, sy - 19 * s); c.lineTo(sx + 24 * s, sy - 2); c.lineTo(sx + 2, sy + 9 * s); c.closePath(); c.fill(); c.stroke();
+      c.fillStyle = 'rgba(120,150,80,.45)'; c.beginPath(); c.ellipse(sx + 4, sy - 19 * s, 8 * s, 3 * s, 0.2, 0, 6.3); c.fill();
+    } else if (o.kind === 'bush') {
+      for (const [dx, dy, r, k] of [[-10, -6, 11, -0.15], [9, -7, 10, -0.05], [0, -14, 12, 0.08]]) { c.fillStyle = shade('#4f7a3a', k); c.beginPath(); c.arc(sx + dx * s, sy + dy * s, r * s, 0, 6.3); c.fill(); c.stroke(); }
+      c.fillStyle = '#c94a4a'; for (const [dx, dy] of [[-6, -12], [5, -16], [10, -6]]) { c.beginPath(); c.arc(sx + dx * s, sy + dy * s, 1.6, 0, 6.3); c.fill(); }
+    } else {
+      c.strokeStyle = '#7d8a4a'; c.lineWidth = 2; c.beginPath();
+      for (let i = -4; i <= 4; i++) { const bx = sx + i * 4 * s, lean = Math.sin(o.ph + i) * 5; c.moveTo(bx, sy + 4); c.quadraticCurveTo(bx + lean * 0.5, sy - 14 * s, bx + lean, sy - (24 + (i % 3) * 5) * s); }
+      c.stroke();
+      c.fillStyle = '#5b3d22'; for (let i = -2; i <= 2; i += 2) { c.beginPath(); c.ellipse(sx + i * 5 * s + Math.sin(o.ph + i) * 4, sy - (27 + i) * s, 2, 5, 0, 0, 6.3); c.fill(); }
+    }
   }
   function drawBlock(x, y, kind) {
     const [sx, sy] = scr(x, y), hgt = 20 + kind * 9, col = S.theme.block, w = HW - 6, hh = HH - 3;
@@ -161,7 +218,7 @@ const Combat = (() => {
     for (const un of S.units) { if (un.gone) continue; const [x, y] = upos(un, now); list.push({ d: x + y + (un.hp > 0 ? 0.1 : -0.1), un, x, y }); }
     list.sort((a, b) => a.d - b.d);
     for (const e of list) {
-      if (e.b) drawBlock(e.b[0], e.b[1], e.b[2]);
+      if (e.b) { const o = S.obs[key(e.b[0], e.b[1])]; if (o) drawObstacle(e.b[0], e.b[1], o); else drawBlock(e.b[0], e.b[1], e.b[2]); }
       else if (e.co) { const k = (now - e.co.t0) / 900; if (k < 1) { const [sx, sy] = scr(e.co.x, e.co.y); drawFig(c, e.co.fig, sx, sy, 0, { down: true, alpha: 1 - k, flip: e.co.flip, scale: US }); } }
       else drawUnit(e.un, e.x, e.y, now);
     }
@@ -796,7 +853,8 @@ const Combat = (() => {
   }
   async function run() {
     await sleep(500);
-    const ps = rnd(10) <= 3, ms = rnd(10) <= 3;
+    let ps = rnd(10) <= 3, ms = rnd(10) <= 3;
+    if (S.surprise) { ps = S.surprise === 'party'; ms = S.surprise === 'enemy'; }   // already rolled on the overland map
     let skip = -1;
     if (ps && !ms) { skip = 0; log('The party is surprised! The enemy acts first.', 'bad'); }
     else if (ms && !ps) { skip = 1; log('The enemy is surprised! You have a free round.', 'good'); }

@@ -65,6 +65,7 @@ function item(id) {
 const SPEC_WEAPONS = ['longsword', 'broadsword', 'battleaxe', 'twohander', 'halberd', 'mace', 'morningstar', 'shortsword', 'spear', 'flail'];
 
 const SHOPS = {
+  village: ['potHeal', 'antidote', 'dagger', 'spear', 'handaxe', 'sling', 'shortbow', 'leather', 'shield'],
   armory: ['dagger', 'club', 'staff', 'handaxe', 'hammer', 'shortsword', 'mace', 'spear', 'flail', 'broadsword', 'morningstar', 'longsword', 'battleaxe', 'halberd', 'twohander',
            'sling', 'dart', 'shortbow', 'longbow', 'crossbow', 'leather', 'studded', 'chain', 'splint', 'scale', 'banded', 'plate', 'shield'],
   apothecary: ['potHeal', 'potExtra', 'antidote'],
@@ -137,6 +138,19 @@ const MONSTERS = {
   malvek:   { name: 'Malvek the Ashen', hd: 5, hp: '18', ac: 5, mv: 12, thac0: 19, atk: ['1d4+1'], size: 'M', ml: 16, xp: 975, gold: '0', tags: ['human', 'person', 'evil'], clvl: 5, leader: true,
               spells: ['mirrorImage', 'stinkingCloud', 'magicMissile', 'holdPerson', 'magicMissile', 'burningHands'],
               fig: { s: 1.08, skin: '#d0c4c4', body: '#3a2a55', head: 'crown', wpn: 'staff', robe: true, glow: '#b07cff' } },
+  /* wilderness */
+  wolf:     { name: 'Wolf', hd: 3, hp: '3d8', ac: 7, mv: 18, thac0: 17, atk: ['2d4'], size: 'S', ml: 10, xp: 120, gold: '0', tags: ['animal'],
+              fig: { type: 'wolf', body: '#6e6a66', belly: '#a9a39b' } },
+  hyena:    { name: 'Hyena', hd: 3, hp: '3d8', ac: 7, mv: 12, thac0: 17, atk: ['2d4'], size: 'M', ml: 9, xp: 65, gold: '0', tags: ['animal'],
+              fig: { type: 'wolf', body: '#a08657', belly: '#c9b48a', spots: '#5a4630', s: 1.05 } },
+  bandit:   { name: 'Bandit', hd: 1, hp: '1d8', ac: 7, mv: 12, thac0: 20, atk: ['1d8'], size: 'M', ml: 10, xp: 15, gold: '2d8', tags: ['human', 'person', 'evil'],
+              fig: { s: 1, skin: '#d2a07a', body: '#5e4b34', head: 'hood', wpn: 'sword', shield: true, trim: '#7a3b2a' } },
+  archer:   { name: 'Bandit Archer', hd: 1, hp: '1d8', ac: 8, mv: 12, thac0: 20, atk: ['1d6'], size: 'M', ml: 9, xp: 15, gold: '2d8', tags: ['human', 'person', 'evil'],
+              ranged: { dmg: '1d6', rof: 2, range: [5, 10, 15] }, fig: { s: 1, skin: '#d2a07a', body: '#4b5a34', head: 'hood', wpn: 'bow' } },
+  captain:  { name: 'Brigand Captain', hd: 3, hp: '21', ac: 4, mv: 12, thac0: 18, atk: ['1d8+1'], size: 'M', ml: 13, xp: 120, gold: '5d10', tags: ['human', 'person', 'evil'], leader: true,
+              fig: { s: 1.06, skin: '#c99a76', body: '#7d8796', head: 'helm', wpn: 'sword', shield: true, trim: '#8a2b2b', plume: '#8a2b2b' } },
+  gnollLord:{ name: 'Bloodmane Packlord', hd: 3, hp: '22', ac: 3, mv: 9, thac0: 17, atk: ['2d4+2'], size: 'L', ml: 14, xp: 175, gold: '6d10', tags: ['gnoll', 'person', 'evil', 'giantkin'], leader: true,
+              fig: { s: 1.3, skin: '#8a5a3a', body: '#7a2222', head: 'snout', wpn: 'axe', shield: true } },
 };
 
 /* ---- Maps ----
@@ -144,7 +158,7 @@ const MONSTERS = {
    . floor  , grass  T tree  F fountain  < > stairs  1-9 town buildings  a-z events */
 const MAPS = {
   town: {
-    name: 'Emberfall', outdoor: true, wall: 'stone', floor: 'cobble', safe: true,
+    name: 'Emberfall', outdoor: true, facades: true, wall: 'stone', floor: 'cobble', safe: true,
     grid: [
       '#########################',
       '#TT,,,,,,,,B>B,,,,,,,,dT#',
@@ -170,6 +184,7 @@ const MAPS = {
     ],
     start: { x: 12, y: 19, dir: 0 },
     stairs: { '>': { map: 'crypt1', x: 12, y: 1, dir: 2 } },
+    exit: { map: 'wild', x: 14, y: 16 },
     locs: { 1: 'inn', 2: 'armory', 3: 'tavern', 4: 'apothecary', 5: 'temple', 6: 'hall', 7: 'training' },
     ev: {
       a: { type: 'text', once: true, text: 'Weathered steps descend beneath the broken arch of the Abbey of the Dawn. Cold air breathes up from the dark, carrying the smell of old smoke.' },
@@ -257,6 +272,93 @@ const MAPS = {
       k: { type: 'chest', gold: 900, items: ['potExtra', 'scroll:lightningBolt', 'scroll:haste'], text: 'Malvek\'s coffers, heavy with the wealth of the dead.' },
     },
   },
+  /* ---- Overland: one square is one mile.
+     . grassland  = road  + bridge  T forest  n hills  % swamp  ^ mountains  ~ river
+     Capital letters are sites (see sites below). ---- */
+  wild: {
+    name: 'The Emberwild', overland: true,
+    grid: [
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^',
+      '^^^^^^^^^..^^^^^^^^^^...^^^^^^^^^..^.^^^^^^^^^^^',
+      '^^^^^^^.....^.^^^^^^....~.^^^^^.......^^^^^^^^^^',
+      '^.^^^.........^^^^.....~~..nnnnnnn.....^^^^^^^^^',
+      '^......................~...nnnnnnn.....^^^^^^^^^',
+      '^...................M..~...nnnnnnn.....^^^^^^^^^',
+      '^....nnnnnnn........=..~~.........nnnnn^^^^^^^^^',
+      '^...nnnnnnnnn.......=...~........nnnnnnn^^^^^^^^',
+      '^...nnnnSnnnn..TTTTT=...~.......nnnnnnnnn^^^^^^^',
+      '^...nnnnnnnnn..TTTTT=...~.......nnnnWnnnn^^^^^^^',
+      '^....nnnnnnn...TTTTT=...~..TTT..nnnnnnnnn^^^^^^^',
+      '^.............=======...~..TTT...nnnnnnnn^^^^^^^',
+      '^...TTTT......=.........~..TTT....nnnnnnnnn^^^^^',
+      '^.TTTTTTT.....=.....R...~............nnnnnnn^^^^',
+      '^.TTTTTTTT....=.........~............nnnnnnn^^^^',
+      '^TTTTTTTTT....=.........~.........============P^',
+      '^TTTTTTTTTT...E=========+==========...nnnnn.^^^^',
+      '^TTTTTTTTTT...=.........~...................^^^^',
+      '^TTTTTTTTTT...=.........~~..................^^^^',
+      '^TTTTTTTTTT...=..........~....TTTTTTT.....TTTTT^',
+      '^TTTTTTTTT=====..........~...TTTTTTTTT....TTTTT^',
+      '^TTTTTTTTTT..............~~..TTTTBTTTT....TTTTT^',
+      '^TTTTHTTTT................~..TTTTTTTTT.........^',
+      '^TTTTTTTTT....TTTTTTTTT...~...TTTTTTT..........^',
+      '^TTTTTTTTT..TTTTTTTTTTTTT.~~..........%%%%%%%..^',
+      '^.TTTTTTT..TTTTTTTTTTTTTTT.~........%%%%%%%%%%%^',
+      '^..TTTTT...TTTTTTTTTTTTTTT.~.......%%%%%%%%%%%%^',
+      '^.........nTTTTTTTTCTTTTTT.~~......%%%%%%%X%%%%^',
+      '^^^^^....nnnTTTTTTTTTTTTT...~..%%%%%%%%%%%%%%%%^',
+      '^^^^^^....nnnnTTTTTTTTT.....~..%%%%%%%%%%%%%%%%^',
+      '^^^^^^......................~~.%%%%%..%%%%%%%%.^',
+      '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^~^^^^^^^^^^^^^^^^^^',
+    ],
+    sites: {
+      E: { name: 'Emberfall', icon: 'town', road: true },
+      M: { name: 'Millbrook', icon: 'village', road: true },
+      W: { name: 'Bloodmane Watchtower', icon: 'tower' },
+      B: { name: 'Brigand Camp', icon: 'camp' },
+      H: { name: 'Hermit\'s Cottage', icon: 'hut' },
+      S: { name: 'The Dawnstones', icon: 'stones' },
+      C: { name: 'Spider Hollow', icon: 'cave' },
+      R: { name: 'Hask Farmstead', icon: 'farm' },
+      X: { name: 'Drowned Chapel', icon: 'chapel' },
+      P: { name: 'Greywater Pass', icon: 'pass', road: true },
+    },
+  },
+  tower: {
+    name: 'Bloodmane Watchtower', wall: 'dungeon', floor: 'flag', ceil: 'vault', arena: 'dungeon',
+    wander: { chance: 0.03, table: [['gnoll', '1d2+1'], ['hyena', '1d3'], ['gnoll', 2]] },
+    grid: [
+      '###################',
+      '#...g...###...j...#',
+      '#.......###.......#',
+      '#...f...###...i...#',
+      '####D#########D####',
+      '#.................#',
+      '#..e..........d...#',
+      '#.................#',
+      '####D####.####S####',
+      '#.......#.#.......#',
+      '#...b...#a#....h..#',
+      '#.......#.#.......#',
+      '#c......#.#.......#',
+      '#########<#########',
+      '###################',
+    ],
+    stairs: { '<': { map: 'wild', x: 36, y: 9 } },
+    ev: {
+      a: { type: 'enc', mons: [['gnoll', 3]], text: 'Hyena-headed giants lounge in the gatehouse passage, gnawing on bones. They lurch upright with yelping war-cries.' },
+      b: { type: 'text', text: 'This was the garrison\'s barracks. Now it is a larder: hooks, salt barrels, and the butchered remains of a dozen stolen cattle. Scratched on the wall in a child\'s hand: "TAMSIN HASK. HELP."\nA broken chain hangs empty. Whoever wrote it was moved, or worse.' },
+      c: { type: 'chest', gold: 60, items: ['potHeal', 'antidote'], text: 'A quartermaster\'s chest, overlooked beneath a heap of rotten hides.' },
+      d: { type: 'enc', mons: [['hyena', 3]], text: 'A pack of hyenas, chained by the old hearth, break their tethers with a chorus of cackling.' },
+      e: { type: 'text', text: 'A war banner of flayed hide hangs from the rafters: a red mane on black. Beneath it lies a purse of grey coins stamped with a burning skull, the mark of the Ashen Circle. Someone has been paying the Bloodmanes to keep the roads unsafe.' },
+      f: { type: 'enc', mons: [['gnollLord', 1], ['gnoll', 3], ['hyena', 1]], quest: 'gnolls', arena: 'dungeon',
+           text: 'Atop a pile of plundered furs squats the Bloodmane Packlord, a huge gnoll in a stolen breastplate. Tamsin Hask, bound and gagged, struggles in the corner. The Packlord laughs, a sound like a dog choking. "More meat walks in!"' },
+      g: { type: 'chest', gold: 450, items: ['shortsword1', 'potHeal'], text: 'The Packlord\'s hoard: caravan silver, a jeweled short sword and a dented helmet full of coins. Tamsin Hask, freed, swears she can find her own way home to Millbrook.' },
+      h: { type: 'chest', gold: 200, items: ['leather1', 'potExtra'], text: 'Behind the false wall the old garrison captain kept his own stash, untouched for decades.' },
+      i: { type: 'enc', mons: [['gnoll', 2], ['hyena', 2]], text: 'Gnoll hunters and their hyenas share a meal around a smoky fire.' },
+      j: { type: 'chest', gold: 120, items: ['scroll:strength'], trap: { dmg: '2d4', text: 'A crude spring-loaded spike punches out of the lid!' }, text: 'A banded coffer, its lock smeared with something sticky.' },
+    },
+  },
 };
 
 const QUESTS = {
@@ -269,8 +371,12 @@ const QUESTS = {
   malvek:    { name: 'The Ashen Circle', gold: 1500, xp: 3000,
                offer: 'We have a name at last: Malvek the Ashen, a necromancer who raises the abbey\'s dead in a sanctum at the heart of the Vaults. End him, and end this.',
                done: 'Malvek is destroyed and the dead lie quiet. Emberfall owes you everything it has. You will always have a home here, heroes.' },
+  gnolls:    { name: 'The Bloodmane Raiders', gold: 400, xp: 1000, side: true, reveal: 'W',
+               offer: 'There is other trouble, beyond the walls. Gnolls of the Bloodmane pack have taken the old watchtower east of the river, and they raid the Millbrook road. They carried off the Hask girl when they burned her family\'s farm. Kill their packlord.',
+               done: 'The Bloodmanes are broken, and Tamsin Hask is home with her kin in Millbrook. The road is open again. Well done.' },
 };
 const QUEST_ORDER = ['redfang', 'reliquary', 'malvek'];
+const SIDE_QUESTS = ['gnolls'];
 
 const RUMORS = [
   'Old Bram swears the monks walled up their valuables before the abbey fell. "Search the storeroom walls," he says, tapping his nose.',
@@ -283,6 +389,16 @@ const RUMORS = [
   '"Trainers at the hall won\'t teach you a thing until you\'ve earned it, and then they charge you for the privilege."',
   'The serving girl whispers that cutthroats lurk in the alley behind the town hall, in the north-east corner of town.',
   '"Rest in that dungeon and something will find you. Sleep at the Lantern instead. Costs less than a funeral."',
+];
+const WILD_RUMORS = [
+  '"Wolves in the western woods have grown bold," the miller says. "Travel the road, and travel by day."',
+  'A drover spits. "Bandits camp somewhere in the forest south of the east road. They watch the bridge for fat purses."',
+  '"Old Wenna lives in the deep woods west of Emberfall. She has a gift for healing, if she likes the look of you."',
+  'A shepherd lowers her voice: "The standing stones on the north-west hills are holy. Nothing evil will sleep within the ring."',
+  '"There is a chapel drowned in the south-east fen. Lights move there at night, and the frogs fall silent."',
+  'A woodcutter shudders. "Webs in the southern forest, big as a barn door. Somewhere past the hills, in a hollow."',
+  '"Greywater Pass is shut. Rockslide. Nothing east of here but the mountains, now."',
+  '"Gnolls laugh like hyenas, and they keep hyenas like dogs. Hear laughing at night, you run."',
 ];
 
 /* Ready-made adventurers so a party can be fielded immediately */

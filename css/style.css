@@ -74,6 +74,7 @@ h1.small { font-size: 28px; color: var(--gold); }
 #viewport { position: relative; aspect-ratio: 16 / 10; width: min(100%, calc((100vh - 268px) * 1.6)); margin: 0 auto; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #000; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
 #viewport canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #combatCanvas { display: none; cursor: crosshair; }
+#overCanvas { display: none; cursor: pointer; }
 #cmdhint { min-height: 18px; color: var(--dim); font-size: 13px; text-align: center; }
 #cmdbar { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; min-height: 36px; }
 #log { flex: 1; min-height: 84px; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 13px; user-select: text; }

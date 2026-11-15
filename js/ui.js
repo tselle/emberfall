@@ -313,8 +313,8 @@ function rosterView(onChange) {
 
 /* ---------------- town services ---------------- */
 function shopDialog(id) {
-  const titles = { armory: 'Ironhand Outfitters', apothecary: 'The Gilded Mortar' };
-  const blurb = { armory: '"Steel, leather and bowstring. If it keeps you alive, I sell it."', apothecary: '"Careful with the blue ones. Actually, careful with all of them."' };
+  const titles = { armory: 'Ironhand Outfitters', apothecary: 'The Gilded Mortar', village: 'Country Goods' };
+  const blurb = { armory: '"Steel, leather and bowstring. If it keeps you alive, I sell it."', apothecary: '"Careful with the blue ones. Actually, careful with all of them."', village: '"Not much, but it\'s honest, and it\'s here."' };
   const body = h('div', { class: 'shop' });
   let buyer = P().find(c => !c.dead) || P()[0], msg = blurb[id];
   modal({ title: titles[id], wide: true, body, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
@@ -342,25 +342,27 @@ function shopDialog(id) {
   }
   render();
 }
+/* a night at an inn: wake at 07:00, +3 hp, spells memorized, march fatigue gone */
+function restNight() {
+  G.time += 1440 - (G.time % 1440) + 420; G.march = 0;
+  for (const ch of P()) {
+    if (ch.dead) continue;
+    ch.hp = Math.min(ch.maxhp, Math.max(0, ch.hp) + 3); ch.layUsed = false; ch.fx = {};
+  }
+  // clerics spend yesterday's remaining cures before re-memorizing
+  for (const ch of P()) if (ch.cls === 'C' && !ch.dead && ch.hp > 0) while (ch.mem.cureLight > 0) {
+    const t = P().filter(c => !c.dead && c.hp < c.maxhp).sort((a, b) => a.hp / a.maxhp - b.hp / b.maxhp)[0];
+    if (!t) break; ch.mem.cureLight--; t.hp = Math.min(t.maxhp, t.hp + rnd(8));
+  }
+  for (const ch of P()) if (!ch.dead) memorizeAll(ch);
+  tickEffects(true);
+}
 function innDialog() {
   const body = h('div');
   let msg = '"Beds are clean, stew is hot, and nothing in here will try to eat you." A night\'s rest restores spells and mends 3 hit points.';
   const m = modal({ title: 'The Drowsy Lantern', body, wide: true, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
   const cost = () => Math.max(1, P().length);
-  function night() {
-    G.gold -= cost(); G.time += 1440 - (G.time % 1440) + 420; // wake at 07:00
-    for (const ch of P()) {
-      if (ch.dead) continue;
-      ch.hp = Math.min(ch.maxhp, Math.max(0, ch.hp) + 3); ch.layUsed = false; ch.fx = {};
-    }
-    // clerics spend yesterday's remaining cures before re-memorizing
-    for (const ch of P()) if (ch.cls === 'C' && !ch.dead && ch.hp > 0) while (ch.mem.cureLight > 0) {
-      const t = P().filter(c => !c.dead && c.hp < c.maxhp).sort((a, b) => a.hp / a.maxhp - b.hp / b.maxhp)[0];
-      if (!t) break; ch.mem.cureLight--; t.hp = Math.min(t.maxhp, t.hp + rnd(8));
-    }
-    for (const ch of P()) if (!ch.dead) memorizeAll(ch);
-    tickEffects(true);
-  }
+  function night() { G.gold -= cost(); restNight(); }
   function render() {
     const hurt = P().some(c => !c.dead && c.hp < c.maxhp);
     body.replaceChildren(h('div', { class: 'msg', text: msg }),
@@ -400,28 +402,39 @@ function templeDialog() {
   render();
 }
 function hallDialog() {
-  const next = QUEST_ORDER.find(q => G.quests[q] !== 'done');
-  if (!next) return void msgBox('Emberfall Town Hall', 'Reeve Halda rises as you enter. "Emberfall\'s champions! There is no more work for you today, and thank the Dawn for that."');
-  const q = QUESTS[next];
-  if (!G.quests[next]) {
-    G.quests[next] = 'active';
-    return void msgBox('Commission: ' + q.name, 'Reeve Halda unrolls a map of the old abbey.\n"' + q.offer + '"\nReward: ' + q.gold + ' gold, and the town\'s gratitude.');
-  }
-  const holder = q.needItem ? P().find(c => c.inv.includes(q.needItem)) : null;
-  if (G.flags['q:' + next] && (!q.needItem || holder)) {
+  const live = () => P().filter(c => !c.dead);
+  // 1. pay out any finished commission
+  const ready = QUEST_ORDER.concat(SIDE_QUESTS).find(id => {
+    const q = QUESTS[id];
+    return G.quests[id] === 'active' && G.flags['q:' + id] && (!q.needItem || P().some(c => c.inv.includes(q.needItem)));
+  });
+  if (ready) {
+    const q = QUESTS[ready], holder = q.needItem ? P().find(c => c.inv.includes(q.needItem)) : null;
     if (holder) holder.inv.splice(holder.inv.indexOf(q.needItem), 1);
-    G.quests[next] = 'done'; G.gold += q.gold;
-    const live = P().filter(c => !c.dead);
-    live.forEach(c => awardXP(c, q.xp));
+    G.quests[ready] = 'done'; G.gold += q.gold;
+    live().forEach(c => awardXP(c, q.xp));
     log('Commission complete: ' + q.name + '. +' + q.gold + ' gp, +' + q.xp + ' XP each.', 'good');
     saveGame('auto'); refreshAll();
     msgBox('Commission Complete: ' + q.name, '"' + q.done + '"\nThe party receives ' + q.gold + ' gold. Each member gains ' + q.xp + ' experience.').then(() => {
-      if (next === 'malvek') { G.won = true; msgBox('Victory!', 'Bells ring across Emberfall. The Abbey of the Dawn will be rebuilt, and the names of your company will be carved above its door.\nYou have completed the adventure. You may keep exploring, or begin anew with a different party.', 'Huzzah!'); }
+      if (ready === 'malvek') msgBox('Victory!', 'Bells ring across Emberfall. The Abbey of the Dawn will be rebuilt, and the names of your company will be carved above its door.\nYou have completed the adventure. You may keep exploring, or begin anew with a different party.', 'Huzzah!');
       else hallDialog();
     });
     return;
   }
-  msgBox('Emberfall Town Hall', 'Reeve Halda looks up from her ledgers.\n"' + q.offer + '"\nYour commission stands: ' + q.name + '.');
+  // 2. offer the next commission in the main story, then any side work
+  const next = QUEST_ORDER.find(q => G.quests[q] !== 'done');
+  const offer = next && !G.quests[next] ? next : SIDE_QUESTS.find(id => !G.quests[id]);
+  if (offer) {
+    const q = QUESTS[offer];
+    G.quests[offer] = 'active';
+    if (q.reveal) revealSite(q.reveal);
+    msgBox('Commission: ' + q.name, (q.side ? 'Reeve Halda taps a second map, of the country south of the river.' : 'Reeve Halda unrolls a map of the old abbey.') + '\n"' + q.offer + '"\nReward: ' + q.gold + ' gold, and the town\'s gratitude.' + (q.reveal ? '\n(The location has been marked on your map of the Emberwild.)' : '')).then(hallDialog);
+    return;
+  }
+  // 3. status
+  const active = QUEST_ORDER.concat(SIDE_QUESTS).filter(id => G.quests[id] === 'active').map(id => QUESTS[id].name);
+  if (!active.length) return void msgBox('Emberfall Town Hall', 'Reeve Halda rises as you enter. "Emberfall\'s champions! There is no more work for you today, and thank the Dawn for that."');
+  msgBox('Emberfall Town Hall', 'Reeve Halda looks up from her ledgers. "Back so soon? The work is not done."\nYour commissions: ' + active.join('; ') + '.');
 }
 function trainingDialog() {
   const body = h('div');
@@ -482,6 +495,7 @@ function helpDialog() {
   const sec = (t, lines) => [h('h3', { text: t }), h('ul', null, lines.map(l => h('li', { text: l })))];
   modal({ title: 'How to Play', wide: true, body: h('div', { class: 'help' },
     sec('Exploring', ['W / ↑ move forward, S / ↓ step back, A / ← and D / → turn, Q / E sidestep.', 'Walk into a door to open it, and into a building\'s door to enter.', 'F searches for secret doors. R makes camp (dungeons only; you may be disturbed).', 'Click a party member or press 1–6 for their character sheet: equipment, spells and items.', 'Esc opens the menu (save, load, help).']),
+    sec('Overland Travel', ['Leave Emberfall by the south gate to enter the Emberwild. W/A/S/D move north/west/south/east, Q/E/Z/C move diagonally, or click the map.', 'Each square is a mile. A party moves at its slowest member\'s rate (12 covers about 24 miles in a ten-hour day); roads halve travel time, forest and hills double it, fen triples it.', 'After ten hours on the march the party is weary and slower until it camps (R). Night travel is more dangerous and you see less.', 'Encounters depend on terrain and time of day. Spot them first and you may ambush or slip away; otherwise you may fight, try to evade (faster parties escape more easily) or parley with intelligent foes.', 'Step onto a place to visit it, or press Enter while standing on it.']),
     sec('Combat', ['Initiative is rolled each round: d10 plus weapon speed. Low goes first.', 'Click a highlighted square to move; click an adjacent enemy to attack; click a distant enemy to fire a missile weapon.', 'Moving away from an adjacent enemy gives it a free attack.', 'Spellcasters who are hit earlier in the round lose their concentration and cannot cast.', 'A character at 0 hp or below is dying and loses 1 hp each round until bandaged; at -10 they are dead.', 'Thieves backstab (+4 to hit, multiplied damage) when hidden or when an ally is on the opposite side of the target.', 'Space ends the turn. Stand on the edge of the field to flee.']),
     sec('The Rules', ['Second Edition AD&D: THAC0 and descending Armor Class, five saving throw categories, class experience tables, racial abilities and class restrictions.', 'Spells must be memorized and are regained only by resting. Choose them on the character sheet.', 'Levels are gained at the Training Hall once you have the experience (and the fee).', 'Experience comes from slain monsters, recovered treasure (1 XP per gold piece) and the Reeve\'s commissions.'])) });
 }

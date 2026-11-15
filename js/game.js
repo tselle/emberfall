@@ -15,7 +15,7 @@ const LOCS = {
 
 function newState() {
   const s = MAPS.town.start;
-  return { v: 1, roster: makePregens(), party: [], gold: 60, map: 'town', x: s.x, y: s.y, dir: s.dir, time: 8 * 60, flags: {}, mods: {}, seen: {}, quests: {}, won: false };
+  return { v: 1, roster: makePregens(), party: [], gold: 60, map: 'town', x: s.x, y: s.y, dir: s.dir, time: 8 * 60, march: 0, flags: {}, mods: {}, seen: {}, quests: {}, won: false };
 }
 function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id)); }
 function timeText() { const t = G.time % 1440; return 'Day ' + (Math.floor(G.time / 1440) + 1) + ', ' + String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
@@ -71,11 +71,22 @@ function setMod(x, y, ch) {
   buildMap(); reveal(); draw();
 }
 function setCam() { X.cam.x = G.x + 0.5; X.cam.y = G.y + 0.5; X.cam.a = (G.dir - 1) * Math.PI / 2; }
+const isWild = () => !!(X.def && X.def.overland);
+const exploreCanvas = () => isWild() ? $('#overCanvas') : $('#view3d');
 function enterMap() {
+  $('#combatCanvas').style.display = 'none';
+  if (MAPS[G.map].overland) {
+    X.def = MAPS[G.map]; X.M = null; X.sprites = [];
+    Over.prepare(X.def); wildEnsureSeen(); Over.place(G.x, G.y); Over.reveal();
+    $('#view3d').style.display = 'none'; $('#overCanvas').style.display = 'block';
+    wildCmds(); Over.draw(); refreshAll();
+    return;
+  }
   buildMap(); setCam(); reveal();
-  $('#view3d').style.display = 'block'; $('#combatCanvas').style.display = 'none';
+  $('#overCanvas').style.display = 'none'; $('#view3d').style.display = 'block';
   exploreCmds(); draw(); refreshAll();
 }
+function redrawMap() { if (isWild()) { wildCmds(); Over.draw(); } else { exploreCmds(); draw(); } }
 function reveal() {
   const seen = G.seen[G.map], w = X.M.w;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = G.x + dx, y = G.y + dy; if (x >= 0 && y >= 0 && x < w && y < X.M.h) seen[y * w + x] = 1; }
@@ -102,9 +113,19 @@ function facingText() {
   return '';
 }
 function refreshAll() {
-  if (!G || !X.M) return;
+  if (!G || !X.def) return;
   UI.refreshParty();
   $('#hudLoc').textContent = X.def.name;
+  if (isWild()) {
+    const t = Over.terr(G.x, G.y), site = X.def.sites[Over.at(G.x, G.y)];
+    $('#hudDir').textContent = site ? site.name : t.name;
+    $('#hudTime').textContent = timeText() + (Over.night() ? ' · night' : '');
+    $('#hudGold').textContent = G.gold + ' gp';
+    $('#hudFace').textContent = 'MV ' + partyMV() + ' · ' + (G.march >= 600 ? 'weary' : Math.floor((G.march || 0) / 60) + 'h on the march');
+    Over.minimap($('#minimap'));
+    return;
+  }
+  if (!X.M) return;
   $('#hudDir').textContent = 'Facing ' + DIRN[G.dir];
   $('#hudTime').textContent = timeText();
   $('#hudGold').textContent = G.gold + ' gp';
@@ -146,7 +167,13 @@ function move(fwd, side) {
 function bump(nx, ny, ch) {
   if (ch >= '1' && ch <= '9') { const id = X.def.locs[ch]; log('You enter ' + LOCS[id][0].replace(/ \(.*/, '') + '.', 'dim'); LOCS[id][1](); }
   else if (ch === 'L') lockedDoor(nx, ny);
-  else if (ch === 'G') log('The south gate is barred by order of the Reeve until the abbey is made safe.', 'dim');
+  else if (ch === 'G' && X.def.exit) leaveTown();
+}
+async function leaveTown() {
+  X.lock = true;
+  const i = await choice('The South Gate', 'Beyond the gate the river road runs out into the Emberwild: farms, forest, fen and hills, and whatever hunts in them.', [{ label: 'Travel into the wilds', cls: 'primary' }, { label: 'Stay in town', cls: 'dim' }]);
+  X.lock = false;
+  if (i === 0) { const e = X.def.exit; goTo(e.map, e.x, e.y, 0); }
 }
 function harm(ch, dmg) {
   ch.hp -= dmg;
@@ -175,7 +202,7 @@ async function arrive(px, py) {
   if (def.stairs && def.stairs[ch]) {
     const s = def.stairs[ch];
     log(ch === '>' ? 'You descend the stairs.' : 'You climb the stairs.', 'dim');
-    G.map = s.map; G.x = s.x; G.y = s.y; G.dir = s.dir;
+    G.map = s.map; G.x = s.x; G.y = s.y; G.dir = s.dir || 0;
     enterMap(); log('— ' + X.def.name + ' —', 'round'); saveGame('auto');
     return;
   }
@@ -191,14 +218,16 @@ async function fight(spec, px, py) {
   X.lock = true;
   const mons = spec.mons.map(([id, n]) => [id, typeof n === 'number' ? n : Math.max(1, rollDice(n))]);
   if (spec.text) await msgBox('Encounter!', spec.text + '\n' + mons.map(([id, n]) => n + ' × ' + MONSTERS[id].name).join(', '), 'To arms!');
-  $('#view3d').style.display = 'none';
-  const res = await Combat.start({ mons, arena: spec.arena || X.def.arena || 'street', party: P() });
-  $('#view3d').style.display = 'block';
+  const ex = exploreCanvas();
+  ex.style.display = 'none';
+  const res = await Combat.start({ mons, arena: spec.arena || X.def.arena || 'street', party: P(), surprise: spec.surprise, night: spec.night });
+  ex.style.display = 'block';
   X.lock = false;
   if (res.result === 'lose') { refreshAll(); gameOver(); return 'lose'; }
   if (res.result === 'fled') {
     res.left.forEach(c => { c.dead = true; c.hp = -10; });
-    G.x = px; G.y = py; setCam(); reveal();
+    G.x = px; G.y = py;
+    if (isWild()) { Over.place(px, py); Over.reveal(); } else { setCam(); reveal(); }
     log('You escape the battle' + (res.left.length ? ', but ' + res.left.map(c => c.name).join(' and ') + ' had to be left behind.' : '.'), 'bad');
   } else {
     for (const c of P()) if (!c.dead && c.hp <= 0) c.hp = 0;
@@ -215,7 +244,7 @@ async function fight(spec, px, py) {
       (gold ? '\nYou gather ' + gold + ' gold pieces.' : '') + (items.length ? '\nFound: ' + items.map(i => item(i).name).join(', ') + ' (carried by ' + carrier.name + ').' : '') +
       (ready.length ? '\n' + ready.join(', ') + ' can now train for a new level in Emberfall.' : ''));
   }
-  exploreCmds(); draw(); refreshAll();
+  redrawMap(); refreshAll();
   return res.result;
 }
 async function runEvent(ch, ev, px, py) {
@@ -260,7 +289,8 @@ async function openChest(key, ev) {
   G.gold += ev.gold; live.forEach(c => awardXP(c, share));
   (ev.items || []).forEach(id => carrier.inv.push(id));
   log('Treasure: ' + ev.gold + ' gp' + (ev.items && ev.items.length ? ', ' + ev.items.map(i => item(i).name).join(', ') : '') + '.', 'good');
-  buildSprites(); draw(); refreshAll();
+  if (!isWild()) { buildSprites(); draw(); }
+  refreshAll();
   await msgBox('Treasure', 'You find ' + ev.gold + ' gold pieces (' + share + ' experience each).' + (ev.items && ev.items.length ? '\nAlso: ' + ev.items.map(i => item(i).name).join(', ') + ' (carried by ' + carrier.name + ').' : ''));
   saveGame('auto');
 }
@@ -309,13 +339,14 @@ function search() {
 }
 async function camp() {
   if (busy()) return;
+  if (isWild()) return wildCamp();
   if (X.def.safe) return log('The watch frowns on camping in the street. Take a room at the Drowsy Lantern.', 'dim');
   if (await choice('Make Camp', 'Rest here for eight hours? Spells will be memorized and each character recovers 1 hit point, but something may find you in the dark.', [{ label: 'Rest', cls: 'primary' }, { label: 'Cancel', cls: 'dim' }])) return;
   if (X.def.wander && Math.random() < 0.35) {
     const [id, n] = pick(X.def.wander.table);
     return fight({ mons: [[id, n]], text: 'Your rest is cut short. Something has found your camp!' }, G.x, G.y);
   }
-  G.time += 480;
+  G.time += 480; G.march = 0;
   for (const ch of P()) if (!ch.dead) { if (ch.hp < ch.maxhp) ch.hp = Math.max(0, ch.hp) + 1; memorizeAll(ch); ch.layUsed = false; }
   tickEffects();
   log('You rest undisturbed for eight hours. Spells are memorized.', 'good');
@@ -360,7 +391,7 @@ function beginAdventure() {
   X.over = false; X.lock = false;
   enterMap();
   log('— Emberfall —', 'round');
-  log('Visit the Town Hall for work, the outfitters for gear, and the abbey steps at the north end of town when you are ready.', 'dim');
+  log('Visit the Town Hall for work, the outfitters for gear, and the abbey steps at the north end of town when you are ready. The south gate leads out into the Emberwild.', 'dim');
   saveGame('auto');
   msgBox('Emberfall', 'The river-town of Emberfall has prospered for a century in the shadow of the Abbey of the Dawn. Then, one winter night, the abbey burned.\nNow goblins nest in its undercroft, the dead are restless in the vaults below, and travelers speak of grey-robed strangers on the roads.\nYour company arrives at the south gate with ' + G.gold + ' gold pieces, sharp steel, and a notice torn from a signpost: "ADVENTURERS WANTED. Apply to Reeve Halda, Town Hall."');
 }
@@ -380,6 +411,17 @@ document.addEventListener('keydown', e => {
   if (Combat.active) { if (Combat.onKey(e)) e.preventDefault(); return; }
   const k = e.key.toLowerCase();
   let used = true;
+  if (isWild()) {
+    const D = { w: [0, -1], arrowup: [0, -1], s: [0, 1], arrowdown: [0, 1], a: [-1, 0], arrowleft: [-1, 0], d: [1, 0], arrowright: [1, 0], q: [-1, -1], e: [1, -1], z: [-1, 1], c: [1, 1] };
+    if (D[k]) wildMove(D[k][0], D[k][1]);
+    else if (k === 'enter' || k === ' ') { const b = UI.cmdKey('enter'); if (b && !busy()) b.click(); }
+    else if (k === 'r') camp();
+    else if (k === 'escape') { if (!busy()) menuDialog(); }
+    else if (k >= '1' && k <= '6') { const ch = P()[+k - 1]; if (ch && !busy()) showSheet(ch); }
+    else used = false;
+    if (used) e.preventDefault();
+    return;
+  }
   if (k === 'w' || k === 'arrowup') move(1, 0);
   else if (k === 's' || k === 'arrowdown') move(-1, 0);
   else if (k === 'a' || k === 'arrowleft') turn(-1);
@@ -395,5 +437,6 @@ document.addEventListener('keydown', e => {
 });
 window.addEventListener('DOMContentLoaded', () => {
   View3D.init($('#view3d'));
+  Over.init($('#overCanvas')); Over.onStep(wildMove);
   showTitle();
 });

@@ -132,6 +132,29 @@ function drawSpider(c, f, t) {
   c.fillStyle = '#f33'; disc(c, 8, -9.5, 1, false); disc(c, 10, -7.5, 1, false);
 }
 
+function drawWolf(c, f, t) {
+  const still = f.still, ph = f.ph || 0, b = still ? 0 : Math.sin(t / 170 + ph), g = still ? 0 : Math.sin(t / 170 + ph + 1.6);
+  const body = f.body, dark = shade(body, -0.3);
+  c.lineWidth = 1.3; c.strokeStyle = 'rgba(15,12,10,.9)'; c.lineCap = 'round';
+  // far legs
+  seg(c, -9, -10, -11 + g * 2, 0, 3.6, dark); seg(c, 9, -10, 11 - g * 2, 0, 3.6, dark);
+  // tail
+  c.fillStyle = body; c.beginPath(); c.moveTo(-15, -15); c.quadraticCurveTo(-26, -14 + b, -27, -5 + b); c.quadraticCurveTo(-22, -10, -14, -11); c.closePath(); c.fill(); c.stroke();
+  // body
+  c.fillStyle = body; c.beginPath(); c.ellipse(-1, -14 + b * 0.4, 16, 7.5, -0.05, 0, 6.3); c.fill(); c.stroke();
+  c.fillStyle = f.belly || shade(body, 0.25); c.beginPath(); c.ellipse(0, -10.5 + b * 0.4, 11, 3, 0, 0, 6.3); c.fill();
+  if (f.spots) { c.fillStyle = f.spots; for (const [sx, sy] of [[-8, -16], [-2, -18], [4, -15], [-5, -12], [8, -18]]) disc(c, sx, sy + b * 0.4, 1.6, false); }
+  // near legs
+  seg(c, -7, -10, -6 - g * 2, 0, 4, body); seg(c, 11, -10, 12 + g * 2, 0, 4, body);
+  // neck and head
+  c.fillStyle = body; c.beginPath(); c.moveTo(9, -19 + b * 0.4); c.lineTo(17, -25 + b * 0.5); c.lineTo(20, -17); c.lineTo(11, -11); c.closePath(); c.fill();
+  c.beginPath(); c.ellipse(19, -23 + b * 0.5, 6, 4.8, 0.15, 0, 6.3); c.fill(); c.stroke();
+  c.fillStyle = shade(body, 0.1); c.beginPath(); c.moveTo(22, -25 + b * 0.5); c.lineTo(30, -21 + b * 0.5); c.lineTo(29, -18 + b * 0.5); c.lineTo(21, -19 + b * 0.5); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = dark; c.beginPath(); c.moveTo(15, -26 + b * 0.5); c.lineTo(16, -33 + b * 0.5); c.lineTo(19.5, -27 + b * 0.5); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = '#111'; disc(c, 29.5, -20.5 + b * 0.5, 1.4, false);
+  c.fillStyle = '#ffcf4a'; disc(c, 21.5, -24 + b * 0.5, 1.2, false);
+}
+
 /* (x, y) is the ground point beneath the figure's feet */
 function drawFig(c, f, x, y, t, o) {
   o = o || {};
@@ -145,6 +168,7 @@ function drawFig(c, f, x, y, t, o) {
   const ff = o.down ? Object.assign({}, f, { still: true }) : f;
   if (f.type === 'rat') drawRat(c, ff, o.down ? 0 : t);
   else if (f.type === 'spider') drawSpider(c, ff, o.down ? 0 : t);
+  else if (f.type === 'wolf') drawWolf(c, ff, o.down ? 0 : t);
   else drawHum(c, ff, t);
   c.restore();
 }
