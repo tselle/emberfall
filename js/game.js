@@ -7,22 +7,12 @@ const SAVE = 'emberfall.save.';
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]], DIRN = ['North', 'East', 'South', 'West'];
 const P = () => G ? G.party.map(id => G.roster.find(c => c.id === id)).filter(Boolean) : [];
 const X = { def: null, cells: null, M: null, sprites: [], cam: { x: 0, y: 0, a: 0 }, busy: false, lock: false };
-const LOCS = {
-  inn: ['The Drowsy Lantern (inn)', () => innDialog()], armory: ['Ironhand Outfitters (arms and armor)', () => shopDialog('armory')],
-  tavern: ['The Gilded Tankard (tavern)', () => tavernDialog()], apothecary: ['The Gilded Mortar (apothecary)', () => shopDialog('apothecary')],
-  temple: ['Temple of the Dawn', () => templeDialog()], hall: ['Emberfall Town Hall', () => hallDialog()], training: ['Training Hall', () => trainingDialog()],
-};
-
-function newState() {
-  const s = MAPS.town.start;
-  return { v: 1, roster: makePregens(), party: [], gold: 60, map: 'town', x: s.x, y: s.y, dir: s.dir, time: 8 * 60, march: 0, flags: {}, mods: {}, seen: {}, quests: {}, won: false };
-}
 function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id)); }
 function timeText() { const t = G.time % 1440; return 'Day ' + (Math.floor(G.time / 1440) + 1) + ', ' + String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
 
 /* ---------------- saving ---------------- */
 function saveGame(slot) {
-  G.meta = { leader: P()[0] ? P()[0].name : '—', where: MAPS[G.map].name, when: timeText(), saved: new Date().toLocaleString(), ts: Date.now() };
+  G.meta = { leader: P()[0] ? P()[0].name : '—', where: MAPS[G.map].name, when: timeText(), saved: new Date().toLocaleString(), ts: Date.now(), mod: mod().code + ' ' + mod().name, lvl: Math.round(partyLevel(P())) };
   try { localStorage.setItem(SAVE + slot, JSON.stringify(G)); return true; }
   catch (e) { log('Could not save the game: ' + e.message, 'bad'); return false; }
 }
@@ -31,6 +21,9 @@ function loadGame(slot) {
   let data = null;
   try { data = JSON.parse(localStorage.getItem(SAVE + slot)); } catch (e) { /* corrupt save */ }
   if (!data || !data.roster) return false;
+  // saves from before campaigns existed belong to the Hollow Vaults
+  if (!data.module) data.module = 'hollow';
+  if (!data.done) data.done = data.won ? [data.module] : [];
   G = data;
   while (modals.length) closeModal();
   showScreen('game'); $('#log').replaceChildren();
@@ -103,10 +96,10 @@ function draw() {
 }
 function facingText() {
   const [dx, dy] = DIRS[G.dir], ch = cell(G.x + dx, G.y + dy);
-  if (ch >= '1' && ch <= '9') return 'Ahead: ' + LOCS[X.def.locs[ch]][0];
+  if (ch >= '1' && ch <= '9') { const id = X.def.locs[ch]; return 'Ahead: ' + locName(id) + ' (' + SERVICES[id].kind + ')'; }
   if (ch === 'D') return 'Ahead: a door';
   if (ch === 'L') return 'Ahead: a locked door';
-  if (ch === 'G') return 'Ahead: the south gate';
+  if (ch === 'G') return X.def.exit ? 'Ahead: ' + (X.def.exit.title || 'the gate').replace(/^The /, 'the ') : 'Ahead: the gate (barred)';
   if (ch === '>') return 'Ahead: stairs leading down';
   if (ch === '<') return 'Ahead: stairs leading up';
   if (ch >= 'a' && ch <= 'z' && X.def.ev[ch] && X.def.ev[ch].type === 'chest' && !G.flags[G.map + ':' + ch]) return 'Ahead: a chest';
@@ -165,15 +158,17 @@ function move(fwd, side) {
   animate({ x: nx + 0.5, y: ny + 0.5, a: X.cam.a }, 170, () => { arrive(px, py); });
 }
 function bump(nx, ny, ch) {
-  if (ch >= '1' && ch <= '9') { const id = X.def.locs[ch]; log('You enter ' + LOCS[id][0].replace(/ \(.*/, '') + '.', 'dim'); LOCS[id][1](); }
+  if (ch >= '1' && ch <= '9') { const id = X.def.locs[ch]; log('You enter ' + locName(id) + '.', 'dim'); SERVICES[id].open(); }
   else if (ch === 'L') lockedDoor(nx, ny);
   else if (ch === 'G' && X.def.exit) leaveTown();
 }
 async function leaveTown() {
   X.lock = true;
-  const i = await choice('The South Gate', 'Beyond the gate the river road runs out into the Emberwild: farms, forest, fen and hills, and whatever hunts in them.', [{ label: 'Travel into the wilds', cls: 'primary' }, { label: 'Stay in town', cls: 'dim' }]);
+  const e = X.def.exit;
+  const i = await choice(e.title || 'The South Gate', e.text || 'Beyond the gate the river road runs out into the Emberwild: farms, forest, fen and hills, and whatever hunts in them.',
+    [{ label: e.go || 'Travel into the wilds', cls: 'primary' }, { label: 'Stay', cls: 'dim' }]);
   X.lock = false;
-  if (i === 0) { const e = X.def.exit; goTo(e.map, e.x, e.y, 0); }
+  if (i === 0) goTo(e.map, e.x, e.y, e.dir || 0);
 }
 function harm(ch, dmg) {
   ch.hp -= dmg;
@@ -242,7 +237,7 @@ async function fight(spec, px, py) {
     const ready = live.filter(canLevel).map(c => c.name);
     await msgBox('Victory', 'The enemy is defeated.\nEach survivor gains ' + share + ' experience (' + res.xp + ' for the foes' + (gold ? ', ' + gold + ' for treasure' : '') + ').' +
       (gold ? '\nYou gather ' + gold + ' gold pieces.' : '') + (items.length ? '\nFound: ' + items.map(i => item(i).name).join(', ') + ' (carried by ' + carrier.name + ').' : '') +
-      (ready.length ? '\n' + ready.join(', ') + ' can now train for a new level in Emberfall.' : ''));
+      (ready.length ? '\n' + ready.join(', ') + ' can now train for a new level in ' + mod().names.town + '.' : ''));
   }
   redrawMap(); refreshAll();
   return res.result;
@@ -250,7 +245,14 @@ async function fight(spec, px, py) {
 async function runEvent(ch, ev, px, py) {
   const key = G.map + ':' + ch;
   if (G.flags[key]) return;
-  if (ev.type === 'text') { G.flags[key] = 1; await msgBox(X.def.name, ev.text); }
+  if (ev.type === 'text') {
+    G.flags[key] = 1;
+    const carrier = (ev.items || []).length ? P().find(c => c.hp > 0 && !c.dead) : null;
+    if (carrier) ev.items.forEach(id => carrier.inv.push(id));
+    if (ev.quest) G.flags['q:' + ev.quest] = 1;
+    await msgBox(X.def.name, ev.text + (carrier ? '\n(' + ev.items.map(i => item(i).name).join(', ') + ' carried by ' + carrier.name + '.)' : ''));
+    if (ev.quest) saveGame('auto');
+  }
   else if (ev.type === 'enc') {
     const r = await fight(ev, px, py);
     if (r === 'win') {
@@ -298,20 +300,20 @@ async function lockedDoor(nx, ny) {
   X.lock = true;
   try {
     const up = P().filter(c => c.hp > 0 && !c.dead);
-    const holder = P().find(c => c.inv.includes('ironKey'));
+    const keyId = X.def.keyItem || 'ironKey', holder = P().find(c => c.inv.includes(keyId));
     const thief = up.filter(c => c.cls === 'T').sort((a, b) => b.lvl - a.lvl)[0];
     const mage = up.find(c => c.cls === 'M' && c.mem.knock > 0);
     const strong = up.slice().sort((a, b) => strMods(b).open - strMods(a).open)[0];
     const pk = thief ? 'pick:' + G.map + ':' + nx + ',' + ny + ':' + thief.id + ':' + thief.lvl : '';
     const opts = [];
-    if (holder) opts.push({ label: 'Use the Iron Vault Key', cls: 'primary', id: 'key' });
+    if (holder) opts.push({ label: 'Use the ' + item(keyId).name, cls: 'primary', id: 'key' });
     if (thief) opts.push({ label: thief.name.split(' ')[0] + ': pick the lock (' + thiefSkills(thief).ol + '%)', id: 'pick', disabled: !!G.flags[pk], title: G.flags[pk] ? 'Already tried. A thief may try again after gaining a level.' : '' });
     if (strong) opts.push({ label: strong.name.split(' ')[0] + ': force it (' + strMods(strong).open + ' in 20)', id: 'bash' });
     if (mage) opts.push({ label: mage.name.split(' ')[0] + ': cast Knock', id: 'knock' });
     opts.push({ label: 'Leave', cls: 'dim', id: 'leave' });
     const o = opts[await choice('Locked Door', X.def.lockText || 'The door is locked.', opts)];
     let open = false;
-    if (o.id === 'key') { open = true; log('The iron key turns with a heavy clunk.', 'good'); }
+    if (o.id === 'key') { open = true; log('The ' + item(keyId).name.toLowerCase() + ' turns with a heavy clunk.', 'good'); }
     else if (o.id === 'pick') { G.flags[pk] = 1; G.time += 10; if (rnd(100) <= thiefSkills(thief).ol) { open = true; log(thief.name + ' teases the tumblers aside. The lock opens.', 'good'); } else log(thief.name + ' cannot defeat the lock.', 'bad'); }
     else if (o.id === 'knock') { mage.mem.knock--; open = true; log(mage.name + ' casts Knock. The lock springs open.', 'spell'); }
     else if (o.id === 'bash') {
@@ -340,7 +342,7 @@ function search() {
 async function camp() {
   if (busy()) return;
   if (isWild()) return wildCamp();
-  if (X.def.safe) return log('The watch frowns on camping in the street. Take a room at the Drowsy Lantern.', 'dim');
+  if (X.def.safe) return log('The watch frowns on camping in the street. Take a room at ' + locName('inn') + '.', 'dim');
   if (await choice('Make Camp', 'Rest here for eight hours? Spells will be memorized and each character recovers 1 hit point, but something may find you in the dark.', [{ label: 'Rest', cls: 'primary' }, { label: 'Cancel', cls: 'dim' }])) return;
   if (X.def.wander && Math.random() < 0.35) {
     const [id, n] = pick(X.def.wander.table);
@@ -361,7 +363,7 @@ function exploreCmds() {
 function gameOver() {
   if (X.over) return; X.over = true;
   const has = !!latestSave();
-  modal({ title: 'The Party Has Fallen', closable: false, body: 'Your company lies still in the dark, and the Ashen Circle will have new servants by morning.\nEmberfall must look for other heroes.',
+  modal({ title: 'The Party Has Fallen', closable: false, body: mod().lose + '\n' + mod().names.town + ' must look for other heroes.',
     buttons: [{ label: 'Load Game', cls: 'primary', disabled: !has, on: () => { X.over = false; saveDialog(false); modals[modals.length - 1].onclose = () => { if (G && partyDown() && $('#game').classList.contains('active')) gameOver(); }; } }, { label: 'Return to Title', on: () => { X.over = false; showTitle(); } }] });
 }
 
@@ -371,29 +373,36 @@ function showTitle() {
   showScreen('title');
   const last = latestSave();
   $('#titleBtns').replaceChildren(
-    h('button', { class: 'btn big primary', text: 'New Game', onclick: () => { G = newState(); showAssembly(); } }),
-    h('button', { class: 'btn big', text: last ? 'Continue — ' + last.where + ', ' + last.when : 'Continue', disabled: !last, onclick: () => loadGame(last.slot) }),
+    h('button', { class: 'btn big primary', text: 'New Game', onclick: () => { G = null; showCampaign(); } }),
+    h('button', { class: 'btn big', text: last ? 'Continue — ' + (last.mod ? last.mod.split(' ')[0] + ' ' : '') + last.where + ', ' + last.when : 'Continue', disabled: !last, onclick: () => loadGame(last.slot) }),
     h('button', { class: 'btn big', text: 'Load Game', disabled: !last, onclick: () => saveDialog(false) }),
     h('button', { class: 'btn big', text: 'How to Play', onclick: helpDialog }));
 }
 function showAssembly() {
   showScreen('assembly');
+  const M = mod();
   const begin = h('button', { class: 'btn big primary', text: 'Begin the Adventure', onclick: beginAdventure });
-  const rv = rosterView(() => { begin.disabled = !G.party.length; $('#assemblyGold').textContent = 'Party funds: ' + G.gold + ' gp'; });
+  const status = () => {
+    begin.disabled = !G.party.length;
+    const pl = partyLevel(P());
+    $('#assemblyGold').textContent = M.code + ': ' + M.name + ' · levels ' + M.levels[0] + '–' + M.levels[1] + ' · ' + DIFFICULTY[M.diff] + ' · party funds ' + G.gold + ' gp' +
+      (pl > M.levels[1] + 1 ? ' · this company is well past the challenge' : '');
+  };
+  const rv = rosterView(status);
   $('#assemblyBody').replaceChildren(rv);
-  $('#assemblyBtns').replaceChildren(h('button', { class: 'btn big', text: 'Back', onclick: showTitle }), begin);
-  begin.disabled = !G.party.length;
-  $('#assemblyGold').textContent = 'Party funds: ' + G.gold + ' gp';
+  $('#assemblyBtns').replaceChildren(h('button', { class: 'btn big', text: 'Back', onclick: showCampaign }), begin);
+  status();
 }
 function beginAdventure() {
   if (!G.party.length) return;
+  const M = mod();
   showScreen('game'); $('#log').replaceChildren();
   X.over = false; X.lock = false;
   enterMap();
-  log('— Emberfall —', 'round');
-  log('Visit the Town Hall for work, the outfitters for gear, and the abbey steps at the north end of town when you are ready. The south gate leads out into the Emberwild.', 'dim');
+  log('— ' + M.code + ': ' + M.name + ' —', 'round');
+  log(M.hint, 'dim');
   saveGame('auto');
-  msgBox('Emberfall', 'The river-town of Emberfall has prospered for a century in the shadow of the Abbey of the Dawn. Then, one winter night, the abbey burned.\nNow goblins nest in its undercroft, the dead are restless in the vaults below, and travelers speak of grey-robed strangers on the roads.\nYour company arrives at the south gate with ' + G.gold + ' gold pieces, sharp steel, and a notice torn from a signpost: "ADVENTURERS WANTED. Apply to Reeve Halda, Town Hall."');
+  msgBox(M.names.town, M.intro + '\nYour company has ' + G.gold + ' gold pieces.');
 }
 
 /* ---------------- input ---------------- */

@@ -69,6 +69,19 @@ const View3D = (() => {
     TEX.flag = mkTex(x => blocks(x, { base: '#6a6358', mortar: '#26221c', bw: 32, bh: 32, seed: 61, vary: 0.18 }));
     TEX.cryptfloor = mkTex(x => { blocks(x, { base: '#434957', mortar: '#14161c', bw: 32, bh: 32, seed: 67, vary: 0.2 }); x.strokeStyle = 'rgba(0,0,0,.5)'; x.beginPath(); x.moveTo(5, 8); x.lineTo(14, 17); x.lineTo(11, 27); x.moveTo(40, 38); x.lineTo(52, 47); x.lineTo(58, 44); x.stroke(); });
     TEX.vault = mkTex(x => blocks(x, { base: '#3f3a33', mortar: '#15120e', bw: 32, bh: 16, seed: 71, vary: 0.15 }));
+    // natural rock: overlapping blotches and cracks rather than masonry
+    const rock = (x, base, seed, n) => { const r = lcg(seed); x.fillStyle = base; x.fillRect(0, 0, TS, TS);
+      for (let i = 0; i < n; i++) { x.fillStyle = shade(base, (r() - 0.5) * 0.45); x.beginPath(); const cx = r() * 64, cy = r() * 64, rr = 5 + r() * 12; x.moveTo(cx + rr, cy); for (let a = 1; a < 7; a++) x.lineTo(cx + Math.cos(a) * rr * (0.6 + r() * 0.5), cy + Math.sin(a) * rr * (0.6 + r() * 0.5)); x.closePath(); x.fill(); }
+      x.strokeStyle = 'rgba(0,0,0,.45)'; x.lineWidth = 1; for (let i = 0; i < 5; i++) { x.beginPath(); let px = r() * 64, py = r() * 64; x.moveTo(px, py); for (let j = 0; j < 3; j++) { px += (r() - 0.5) * 18; py += r() * 14; x.lineTo(px, py); } x.stroke(); }
+      speckle(x, r, 600, 0.16); };
+    TEX.cave = mkTex(x => rock(x, '#5e564c', 211, 34));
+    TEX.mine = mkTex(x => { rock(x, '#5a5249', 223, 30); box(x, '#4a3422', 4, 0, 7, 64); box(x, '#4a3422', 53, 0, 7, 64); box(x, '#5a4029', 0, 2, 64, 7); box(x, 'rgba(0,0,0,.35)', 0, 9, 64, 2); box(x, 'rgba(255,255,255,.08)', 5, 0, 2, 64); });
+    TEX.cavefloor = mkTex(x => rock(x, '#3e3934', 227, 40));
+    TEX.barrow = mkTex(x => { blocks(x, { base: '#6f6656', mortar: '#2b2620', bw: 13, bh: 6, seed: 229, vary: 0.35, speck: 300 }); const r = lcg(233); for (let i = 0; i < 30; i++) { x.fillStyle = 'rgba(40,30,20,' + (0.2 + r() * 0.3) + ')'; x.fillRect(r() * 64 | 0, r() * 64 | 0, 2 + r() * 5 | 0, 2); } });
+    TEX.keep = mkTex(x => { blocks(x, { base: '#4a5054', mortar: '#1b1e20', bw: 32, bh: 21, seed: 239, vary: 0.12 }); const r = lcg(241); for (let i = 0; i < 9; i++) { const sx = r() * 64; const g = x.createLinearGradient(0, 0, 0, 64); g.addColorStop(0, 'rgba(20,40,40,0)'); g.addColorStop(1, 'rgba(30,60,55,.45)'); x.fillStyle = g; x.fillRect(sx, r() * 30, 2 + r() * 3, 64); } });
+    TEX.keepfloor = mkTex(x => { blocks(x, { base: '#3b4144', mortar: '#151819', bw: 32, bh: 32, seed: 251, vary: 0.15 }); const r = lcg(257); for (let i = 0; i < 4; i++) { x.fillStyle = 'rgba(80,110,120,.22)'; x.beginPath(); x.ellipse(r() * 64, r() * 64, 6 + r() * 9, 3 + r() * 4, 0, 0, 6.3); x.fill(); } });
+    TEX.dirt = mkTex(x => { const r = lcg(263); x.fillStyle = '#4e4232'; x.fillRect(0, 0, TS, TS); for (let i = 0; i < 700; i++) { x.fillStyle = shade('#4e4232', (r() - 0.5) * 0.5); x.fillRect(r() * 64 | 0, r() * 64 | 0, 1 + r() * 2 | 0, 1 + r() * 2 | 0); } for (let i = 0; i < 25; i++) { x.fillStyle = shade('#77705f', (r() - 0.5) * 0.3); x.beginPath(); x.ellipse(r() * 64, r() * 64, 1.5 + r() * 2, 1 + r(), 0, 0, 6.3); x.fill(); } });
+    TEX.ruin = mkTex(x => { blocks(x, { base: '#6b6a62', mortar: '#2f302c', bw: 24, bh: 14, seed: 269, vary: 0.3 }); const r = lcg(271); for (let i = 0; i < 90; i++) { const yy = 64 - r() * r() * 50; x.fillStyle = shade('#4a6a34', (r() - 0.5) * 0.4); x.beginPath(); x.arc(r() * 64, yy, 1.5 + r() * 2.5, 0, 6.3); x.fill(); } line(x, '#1e1d1a', 1.5, [40, 0, 36, 18, 44, 30, 39, 64]); });
     // billboards (transparent background)
     TEX.tree = mkTex(x => { x.fillStyle = '#4a3320'; x.fillRect(28, 34, 8, 30); x.fillStyle = '#3a2718'; x.fillRect(33, 34, 3, 30);
       const r = lcg(81); for (let i = 0; i < 26; i++) { x.fillStyle = shade('#2f6b34', (r() - 0.5) * 0.5); x.beginPath(); x.arc(14 + r() * 36, 8 + r() * 30, 6 + r() * 5, 0, 6.3); x.fill(); } });
@@ -268,6 +281,15 @@ const View3D = (() => {
     // --- town walls and gatehouse: battlements with arrow slits
     const wallW = x => blocks(x, { base: '#7c7f86', mortar: '#3a3b40', bw: 32, bh: 16, seed: 3 });
     FAC.wall = { lower: [TEX.stone], upper: [T(x => { wallW(x); crenels(x); }), T(x => { wallW(x); crenels(x); box(x, '#101114', 30, 22, 4, 22); box(x, '#101114', 26, 31, 12, 3); })] };
+    // --- general store: whitewashed planks, striped awning, crates and sacks out front
+    const stoW = x => { const r = lcg(281); for (let yy = 0; yy < TS; yy += 7) { box(x, shade('#d9d2c0', (r() - 0.5) * 0.12), 0, yy, TS, 7); box(x, 'rgba(0,0,0,.18)', 0, yy + 6, TS, 1); } speckle(x, r, 200, 0.08); box(x, '#5a4630', 0, 0, 4, TS); box(x, '#5a4630', 60, 0, 4, TS); };
+    const awning = (x, y) => { for (let i = 0; i < 8; i++) box(x, i % 2 ? '#f0ece0' : '#2f7a4a', i * 8, y, 8, 9); for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#f0ece0' : '#2f7a4a'; x.beginPath(); x.arc(i * 8 + 4, y + 9, 4, 0, Math.PI); x.fill(); } box(x, 'rgba(0,0,0,.25)', 0, y + 13, TS, 3); };
+    const crates = x => { box(x, '#8a6a3c', 8, 46, 16, 16); line(x, '#5a4428', 1.5, [8, 46, 24, 62]); line(x, '#5a4428', 1.5, [24, 46, 8, 62]); x.fillStyle = '#b89a6a'; x.beginPath(); x.ellipse(42, 56, 9, 7, 0, 0, 6.3); x.fill(); x.fillStyle = '#9a7e52'; x.beginPath(); x.ellipse(42, 49, 4, 2.5, 0, 0, 6.3); x.fill(); };
+    FAC.store = {
+      lower: [T(x => { stoW(x); awning(x, 6); win(x, 18, 24, 28, 16, { lit: true }); crates(x); }), T(x => { stoW(x); awning(x, 6); crates(x); }), T(x => stoW(x))],
+      upper: [T(x => gable(x, '#6b5a3a', () => { stoW(x); win(x, 26, 34, 12, 12, { lit: false, shutters: '#2f7a4a' }); }))],
+      door: T(x => { stoW(x); awning(x, 2); door(x, { wood: '#2f7a4a' }); }),
+    };
     FAC.gate = { lower: [TEX.gate], upper: [T(x => { wallW(x); crenels(x); for (const bx of [8, 44]) { x.fillStyle = '#8a1f24'; x.beginPath(); x.moveTo(bx, 14); x.lineTo(bx + 12, 14); x.lineTo(bx + 12, 54); x.lineTo(bx + 6, 48); x.lineTo(bx, 54); x.closePath(); x.fill(); box(x, '#d4af37', bx + 4, 24, 4, 12); } })] };
   }
 

@@ -237,6 +237,7 @@ function createDialog(onDone) {
       if (!st.name.trim()) { nameInput.focus(); nameInput.classList.add('err'); return; }
       const ch = newCharacter({ name: st.name.trim(), race: st.race, cls: st.cls, align: st.align, color: st.color, stats: st.stats, spec: st.cls === 'F' ? st.spec : null, foe: st.cls === 'R' ? st.foe : null });
       G.roster.push(ch); G.gold += st.gold;
+      outfitRecruit(ch); // adventures for experienced heroes start new recruits at their level
       closeModal(m); onDone(ch);
     } }] });
   function fix() {
@@ -273,7 +274,8 @@ function createDialog(onDone) {
           h('table', { class: 'stats' }, ABILS.map(a => h('tr', null, h('td', { text: ABIL_NAMES[a] }), h('td', { class: 'num big', text: a === 'str' ? strText(pv) : pv[a] }), h('td', { class: 'note', text: notes[a] })))),
           h('div', { class: 'row' }, h('button', { class: 'btn primary', text: '⚄ Reroll abilities', onclick: () => { fix(); render(); } })),
           h('div', { class: 'dimtxt', text: 'Abilities are rolled 4d6 (drop lowest) in order, with racial adjustments, and re-rolled until they meet the minimums for the chosen race and class.' }),
-          st.cls === 'M' ? h('div', { class: 'dimtxt', text: 'Starting spellbook: Magic Missile, Sleep, Armor, Burning Hands, Shield.' }) : null)));
+          st.cls === 'M' ? h('div', { class: 'dimtxt', text: 'Starting spellbook: Magic Missile, Sleep, Armor, Burning Hands, Shield.' }) : null,
+          mod().lvl > 1 ? h('div', { class: 'msg', text: 'This adventure begins at level ' + mod().lvl + '. Your hero will be trained up to it (hit points rolled for each level' + (st.cls === 'M' ? ', one new spell per level' : '') + ') and receives ' + (KIT_GOLD[kitTier(mod().lvl)] || 0) + ' extra gold' + (kitTier(mod().lvl) >= 5 ? ' and a magic weapon' : '') + '.' }) : null)));
   }
   fix(); render();
 }
@@ -313,8 +315,10 @@ function rosterView(onChange) {
 
 /* ---------------- town services ---------------- */
 function shopDialog(id) {
-  const titles = { armory: 'Ironhand Outfitters', apothecary: 'The Gilded Mortar', village: 'Country Goods' };
-  const blurb = { armory: '"Steel, leather and bowstring. If it keeps you alive, I sell it."', apothecary: '"Careful with the blue ones. Actually, careful with all of them."', village: '"Not much, but it\'s honest, and it\'s here."' };
+  const titles = { armory: locName('armory'), apothecary: locName('apothecary'), store: locName('store'), village: 'Country Goods' };
+  const blurb = { armory: shopStock('armory').some(i => ITEMS[i].silver) ? '"Steel, leather and bowstring. And silver, for what walks in the dark. It costs, but so does dying."' : '"Steel, leather and bowstring. If it keeps you alive, I sell it."',
+    apothecary: '"Careful with the blue ones. Actually, careful with all of them."', village: '"Not much, but it\'s honest, and it\'s here."', store: '"Rope, lamp oil, a good knife and a potion or two. Everything a body needs for a trip underground."' };
+  const stock = id === 'village' ? SHOPS.village : shopStock(id);
   const body = h('div', { class: 'shop' });
   let buyer = P().find(c => !c.dead) || P()[0], msg = blurb[id];
   modal({ title: titles[id], wide: true, body, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
@@ -324,7 +328,7 @@ function shopDialog(id) {
         h('span', { class: 'gold', text: G.gold + ' gp' })),
       h('div', { class: 'msg', text: msg }),
       h('div', { class: 'cols' },
-        h('div', { class: 'col' }, h('h3', { text: 'For sale' }), h('div', { class: 'scroll' }, h('table', { class: 'inv' }, SHOPS[id].map(iid => { const it = ITEMS[iid], ok = canUse(buyer, it); return h('tr', { class: ok ? '' : 'unusable' },
+        h('div', { class: 'col' }, h('h3', { text: 'For sale' }), h('div', { class: 'scroll' }, h('table', { class: 'inv' }, stock.map(iid => { const it = ITEMS[iid], ok = canUse(buyer, it); return h('tr', { class: ok ? '' : 'unusable' },
           h('td', { text: it.name }), h('td', { class: 'note', text: itemDesc(it) + (ok ? '' : ' · not usable') }), h('td', { class: 'num', text: it.cost + ' gp' }),
           h('td', null, h('button', { class: 'btn mini', text: 'Buy', disabled: G.gold < it.cost, onclick: () => {
             G.gold -= it.cost; buyer.inv.push(iid); msg = buyer.name + ' buys ' + it.name + '.';
@@ -360,7 +364,7 @@ function restNight() {
 function innDialog() {
   const body = h('div');
   let msg = '"Beds are clean, stew is hot, and nothing in here will try to eat you." A night\'s rest restores spells and mends 3 hit points.';
-  const m = modal({ title: 'The Drowsy Lantern', body, wide: true, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
+  const m = modal({ title: locName('inn'), body, wide: true, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
   const cost = () => Math.max(1, P().length);
   function night() { G.gold -= cost(); restNight(); }
   function render() {
@@ -382,7 +386,7 @@ function innDialog() {
 function templeDialog() {
   const body = h('div');
   let msg = '"The Dawn turns no one away," says the priestess, "though the roof does need mending."';
-  modal({ title: 'Temple of the Dawn', body, wide: true, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
+  modal({ title: locName('temple'), body, wide: true, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
   function svc(label, cost, fn) { return h('button', { class: 'btn mini', text: label + ' — ' + cost + ' gp', disabled: G.gold < cost, onclick: () => { G.gold -= cost; fn(); render(); } }); }
   function render() {
     body.replaceChildren(h('div', { class: 'msg', text: msg }), h('div', { class: 'dimtxt', text: 'Party gold: ' + G.gold + ' gp' }),
@@ -402,9 +406,10 @@ function templeDialog() {
   render();
 }
 function hallDialog() {
+  const M = mod(), giver = M.names.giver, hall = locName('hall'), all = M.quests.concat(M.side);
   const live = () => P().filter(c => !c.dead);
-  // 1. pay out any finished commission
-  const ready = QUEST_ORDER.concat(SIDE_QUESTS).find(id => {
+  // 1. pay out any finished commission (the adventure's final one last, so side work is settled first)
+  const ready = all.filter(id => id !== M.final).concat([M.final]).find(id => {
     const q = QUESTS[id];
     return G.quests[id] === 'active' && G.flags['q:' + id] && (!q.needItem || P().some(c => c.inv.includes(q.needItem)));
   });
@@ -416,30 +421,31 @@ function hallDialog() {
     log('Commission complete: ' + q.name + '. +' + q.gold + ' gp, +' + q.xp + ' XP each.', 'good');
     saveGame('auto'); refreshAll();
     msgBox('Commission Complete: ' + q.name, '"' + q.done + '"\nThe party receives ' + q.gold + ' gold. Each member gains ' + q.xp + ' experience.').then(() => {
-      if (ready === 'malvek') msgBox('Victory!', 'Bells ring across Emberfall. The Abbey of the Dawn will be rebuilt, and the names of your company will be carved above its door.\nYou have completed the adventure. You may keep exploring, or begin anew with a different party.', 'Huzzah!');
+      if (ready === M.final) moduleComplete();
       else hallDialog();
     });
     return;
   }
   // 2. offer the next commission in the main story, then any side work
-  const next = QUEST_ORDER.find(q => G.quests[q] !== 'done');
-  const offer = next && !G.quests[next] ? next : SIDE_QUESTS.find(id => !G.quests[id]);
+  const next = M.quests.find(q => G.quests[q] !== 'done');
+  const offer = next && !G.quests[next] ? next : M.side.find(id => !G.quests[id]);
   if (offer) {
     const q = QUESTS[offer];
     G.quests[offer] = 'active';
     if (q.reveal) revealSite(q.reveal);
-    msgBox('Commission: ' + q.name, (q.side ? 'Reeve Halda taps a second map, of the country south of the river.' : 'Reeve Halda unrolls a map of the old abbey.') + '\n"' + q.offer + '"\nReward: ' + q.gold + ' gold, and the town\'s gratitude.' + (q.reveal ? '\n(The location has been marked on your map of the Emberwild.)' : '')).then(hallDialog);
+    msgBox('Commission: ' + q.name, (q.lead || giver + ' has work for you.') + '\n"' + q.offer + '"\nReward: ' + q.gold + ' gold, and the town\'s gratitude.' + (q.reveal ? '\n(The location has been marked on your map of the Emberwild.)' : '')).then(hallDialog);
     return;
   }
   // 3. status
-  const active = QUEST_ORDER.concat(SIDE_QUESTS).filter(id => G.quests[id] === 'active').map(id => QUESTS[id].name);
-  if (!active.length) return void msgBox('Emberfall Town Hall', 'Reeve Halda rises as you enter. "Emberfall\'s champions! There is no more work for you today, and thank the Dawn for that."');
-  msgBox('Emberfall Town Hall', 'Reeve Halda looks up from her ledgers. "Back so soon? The work is not done."\nYour commissions: ' + active.join('; ') + '.');
+  const active = all.filter(id => G.quests[id] === 'active').map(id => QUESTS[id].name);
+  if (!active.length) return void msgBox(hall, giver + ' rises as you enter. "' + M.names.town + '\'s champions! There is no more work for you today, and thank the Dawn for that."' +
+    (M.next && G.done.includes(G.module) && !G.done.includes(M.next) ? '\n(When you are ready to move on, choose Campaign from the menu.)' : ''));
+  msgBox(hall, giver + ' looks up from a desk piled with papers. "Back so soon? The work is not done."\nYour commissions: ' + active.join('; ') + '.');
 }
 function trainingDialog() {
   const body = h('div');
-  let msg = '"Experience is the best teacher," growls Master Orrin. "I\'m the second best, and I charge."';
-  modal({ title: 'Emberfall Training Hall', body, wide: true, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
+  let msg = '"Experience is the best teacher," growls ' + mod().names.trainer + '. "I\'m the second best, and I charge."';
+  modal({ title: locName('training'), body, wide: true, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
   async function train(ch) {
     const cost = 100 * ch.lvl; G.gold -= cost;
     const r = levelUp(ch);
@@ -465,10 +471,11 @@ function trainingDialog() {
 function tavernDialog() {
   const body = h('div');
   let msg = 'Smoke, laughter and the smell of spilled ale. A few locals eye your weapons with interest.';
-  modal({ title: 'The Gilded Tankard', body, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
+  modal({ title: locName('tavern'), body, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: refreshAll });
+  const R = mod().rumors;
   function render() {
     body.replaceChildren(h('div', { class: 'msg', text: msg }),
-      h('button', { class: 'btn', text: 'Buy a round and listen (2 gp)', disabled: G.gold < 2, onclick: () => { G.gold -= 2; G.rumor = ((G.rumor == null ? Math.floor(Math.random() * RUMORS.length) : G.rumor) + 1) % RUMORS.length; msg = RUMORS[G.rumor]; render(); } }),
+      h('button', { class: 'btn', text: 'Buy a round and listen (2 gp)', disabled: G.gold < 2, onclick: () => { G.gold -= 2; G.rumor = ((G.rumor == null ? Math.floor(Math.random() * R.length) : G.rumor) + 1) % R.length; msg = R[G.rumor]; render(); } }),
       h('div', { class: 'dimtxt', text: 'Party gold: ' + G.gold + ' gp' }));
   }
   render();
@@ -486,7 +493,7 @@ function saveDialog(saving) {
       return h('button', { class: 'btn slot', disabled: !saving && !meta, onclick: () => {
         if (saving) { saveGame(s); log('Game saved to ' + slotLabel(s) + '.', 'good'); closeModal(m); }
         else { closeModal(m); loadGame(s); }
-      } }, h('b', { text: slotLabel(s) }), h('span', { text: meta ? meta.leader + ' · ' + meta.where + ' · ' + meta.when : 'Empty' }), meta ? h('span', { class: 'dimtxt', text: meta.saved }) : null);
+      } }, h('b', { text: slotLabel(s) }), h('span', { text: meta ? meta.leader + ' · ' + (meta.mod ? meta.mod.split(' ')[0] + ' ' : '') + meta.where + ' · ' + meta.when : 'Empty' }), meta ? h('span', { class: 'dimtxt', text: meta.saved }) : null);
     }));
   }
   render();
@@ -494,15 +501,17 @@ function saveDialog(saving) {
 function helpDialog() {
   const sec = (t, lines) => [h('h3', { text: t }), h('ul', null, lines.map(l => h('li', { text: l })))];
   modal({ title: 'How to Play', wide: true, body: h('div', { class: 'help' },
+    sec('Campaigns and Adventures', ['New Game opens the adventure chooser. Each module has its own home base, dungeons and commissions, and varies in starting level, difficulty (Easy to Deadly) and size (Short to Large).', 'Adventures above 1st level start the ready-made heroes at that level with suitable gear. Characters you create are trained up to it too, with extra gold.', 'You can also bring your company from any saved game. Anyone below the module\'s starting level is trained up to it.', 'Finish an adventure\'s last commission to complete it; you will be offered the next in the saga. Choose Campaign from the menu to travel between adventures at any time. Unfinished progress is kept.']),
     sec('Exploring', ['W / ↑ move forward, S / ↓ step back, A / ← and D / → turn, Q / E sidestep.', 'Walk into a door to open it, and into a building\'s door to enter.', 'F searches for secret doors. R makes camp (dungeons only; you may be disturbed).', 'Click a party member or press 1–6 for their character sheet: equipment, spells and items.', 'Esc opens the menu (save, load, help).']),
     sec('Overland Travel', ['Leave Emberfall by the south gate to enter the Emberwild. W/A/S/D move north/west/south/east, Q/E/Z/C move diagonally, or click the map.', 'Each square is a mile. A party moves at its slowest member\'s rate (12 covers about 24 miles in a ten-hour day); roads halve travel time, forest and hills double it, fen triples it.', 'After ten hours on the march the party is weary and slower until it camps (R). Night travel is more dangerous and you see less.', 'Encounters depend on terrain and time of day. Spot them first and you may ambush or slip away; otherwise you may fight, try to evade (faster parties escape more easily) or parley with intelligent foes.', 'Step onto a place to visit it, or press Enter while standing on it.']),
     sec('Combat', ['Initiative is rolled each round: d10 plus weapon speed. Low goes first.', 'Click a highlighted square to move; click an adjacent enemy to attack; click a distant enemy to fire a missile weapon.', 'Moving away from an adjacent enemy gives it a free attack.', 'Spellcasters who are hit earlier in the round lose their concentration and cannot cast.', 'A character at 0 hp or below is dying and loses 1 hp each round until bandaged; at -10 they are dead.', 'Thieves backstab (+4 to hit, multiplied damage) when hidden or when an ally is on the opposite side of the target.', 'Space ends the turn. Stand on the edge of the field to flee.']),
     sec('The Rules', ['Second Edition AD&D: THAC0 and descending Armor Class, five saving throw categories, class experience tables, racial abilities and class restrictions.', 'Spells must be memorized and are regained only by resting. Choose them on the character sheet.', 'Levels are gained at the Training Hall once you have the experience (and the fee).', 'Experience comes from slain monsters, recovered treasure (1 XP per gold piece) and the Reeve\'s commissions.'])) });
 }
 function menuDialog() {
-  modal({ title: 'Emberfall', body: h('div', { class: 'dimtxt', text: 'Day ' + (Math.floor(G.time / 1440) + 1) + ' · ' + G.gold + ' gold · ' + MAPS[G.map].name }), buttons: [
+  modal({ title: mod().code + ': ' + mod().name, body: h('div', { class: 'dimtxt', text: 'Day ' + (Math.floor(G.time / 1440) + 1) + ' · ' + G.gold + ' gold · ' + MAPS[G.map].name }), buttons: [
     { label: 'Save Game', on: () => saveDialog(true), disabled: Combat.active },
     { label: 'Load Game', on: () => saveDialog(false), disabled: Combat.active },
+    { label: 'Campaign', on: campaignDialog, disabled: Combat.active || !MAPS[G.map].safe, title: MAPS[G.map].safe ? '' : 'Return to a town to set out for another adventure' },
     { label: 'How to Play', on: helpDialog },
     { label: 'Quit to Title', cls: 'warn', on: () => { if (!Combat.active) showTitle(); }, disabled: Combat.active },
     { label: 'Resume', cls: 'primary' }] });

@@ -62,6 +62,26 @@ h1.small { font-size: 28px; color: var(--gold); }
 .row { display: flex; gap: 6px; align-items: center; }
 .row.wrap { flex-wrap: wrap; }
 
+/* adventure chooser */
+#campaign { align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 0%, #2a2219, #0b0c11 70%); }
+.modgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0 4px; }
+.modcard { display: flex; flex-direction: column; gap: 7px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; cursor: pointer; transition: border-color .12s, box-shadow .12s, transform .08s; }
+.modcard:hover { border-color: #6b6247; }
+.modcard.on { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 8px 24px rgba(227,181,74,.12); background: linear-gradient(#262a37, #1f222d); }
+.modcode { font: bold 11.5px Verdana, sans-serif; letter-spacing: .08em; color: #1a1408; background: var(--gold); border-radius: 4px; padding: 2px 6px; flex: none; }
+.modname { font-size: 17px; color: #fff3cf; }
+.modmeta { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font-size: 12px; border: 1px solid #454a5f; border-radius: 10px; padding: 1px 9px; color: var(--ink); display: inline-flex; align-items: center; gap: 3px; }
+.tag.dim { color: var(--dim); }
+.pips { display: inline-flex; gap: 3px; margin-left: 2px; }
+.pips i { width: 8px; height: 8px; border-radius: 50%; background: #3a3f52; }
+.pips i.on { background: var(--accent); box-shadow: 0 0 4px rgba(200,80,44,.6); }
+.modblurb { font-size: 13.5px; line-height: 1.45; color: #d9d2bf; }
+.modstats { font-size: 12px; color: var(--dim); border-top: 1px solid #2c303e; padding-top: 6px; }
+.donemark { color: var(--good); font-size: 13px; margin-left: auto; }
+.camprow { display: flex; gap: 10px; align-items: center; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.camprow.here { border-color: var(--gold); }
+
 /* game layout */
 #game { gap: 10px; padding: 10px; }
 #left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -126,4 +146,4 @@ tr.unusable td { opacity: .5; }
 .shop .gold { margin-left: auto; font-size: 16px; }
 
 ::-webkit-scrollbar { width: 9px; } ::-webkit-scrollbar-thumb { background: #3a3f52; border-radius: 5px; } ::-webkit-scrollbar-track { background: transparent; }
-@media (max-width: 900px) { #right { width: 210px; } .cols, .roster { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { #right { width: 210px; } .cols, .roster, .modgrid { grid-template-columns: 1fr; } }

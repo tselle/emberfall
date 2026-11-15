@@ -127,9 +127,29 @@ function drawSpider(c, f, t) {
   }
   c.lineWidth = 1.3;
   c.fillStyle = f.body; disc(c, -5, -10, 9);
-  c.fillStyle = '#7a1f2b'; c.beginPath(); c.ellipse(-6, -11, 3, 5, 0, 0, 6.3); c.fill();
+  c.fillStyle = f.mark || '#7a1f2b'; c.beginPath(); c.ellipse(-6, -11, 3, 5, 0, 0, 6.3); c.fill();
   c.fillStyle = shade(f.body, 0.1); disc(c, 6, -8, 5.5);
-  c.fillStyle = '#f33'; disc(c, 8, -9.5, 1, false); disc(c, 10, -7.5, 1, false);
+  c.fillStyle = f.eye || '#f33'; disc(c, 8, -9.5, 1, false); disc(c, 10, -7.5, 1, false);
+  if (f.glow) { c.save(); c.globalAlpha *= 0.5 + 0.3 * Math.sin(t / 220 + (f.ph || 0)); c.fillStyle = f.glow; disc(c, -9, -14, 3, false); disc(c, 6, -13, 2.4, false); c.restore(); }
+}
+/* many-legged crawlers: giant centipedes and carrion crawlers */
+function drawCentipede(c, f, t) {
+  const ph = f.ph || 0, segs = f.segs || 7, body = f.body;
+  c.lineCap = 'round'; c.lineWidth = 1.2; c.strokeStyle = 'rgba(15,12,10,.9)';
+  const pts = [];
+  for (let i = 0; i < segs; i++) { const x = -18 + i * 5.6, y = -5 - Math.sin(t / 150 + ph + i * 0.9) * 1.6 - (i === segs - 1 ? 5 : 0) - (f.rear && i >= segs - 2 ? 4 : 0); pts.push([x, y]); }
+  for (let i = 0; i < segs - 1; i++) {
+    const [x, y] = pts[i], k = Math.sin(t / 90 + ph + i * 1.3) * 1.8;
+    c.strokeStyle = shade(body, -0.35); c.lineWidth = 1.4;
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x - 2 + k, 0); c.stroke();
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x + 2 - k, 0.5); c.stroke();
+  }
+  c.strokeStyle = 'rgba(15,12,10,.9)'; c.lineWidth = 1.2;
+  for (let i = 0; i < segs; i++) { const [x, y] = pts[i], r = i === segs - 1 ? 4.8 : 4.2 - Math.abs(i - segs / 2) * 0.15; c.fillStyle = shade(body, i % 2 ? 0.08 : -0.05); disc(c, x, y, r); }
+  const [hx, hy] = pts[segs - 1];
+  if (f.tent) { c.strokeStyle = f.tent; c.lineWidth = 1.3; for (let i = 0; i < 6; i++) { const a = -0.9 + i * 0.36, w = Math.sin(t / 120 + i) * 2; c.beginPath(); c.moveTo(hx + 3, hy + 1); c.quadraticCurveTo(hx + 9 + w, hy - 3 + i, hx + 8 + Math.cos(a) * 8, hy + 2 + Math.sin(a) * 8); c.stroke(); } }
+  else { c.strokeStyle = shade(body, -0.4); c.lineWidth = 1.2; c.beginPath(); c.moveTo(hx + 3, hy - 3); c.quadraticCurveTo(hx + 10, hy - 10, hx + 13, hy - 6); c.moveTo(hx + 3, hy - 1); c.quadraticCurveTo(hx + 11, hy - 4, hx + 14, hy); c.stroke(); }
+  c.fillStyle = f.eye || '#f33'; disc(c, hx + 2, hy - 1.5, 1, false);
 }
 
 function drawWolf(c, f, t) {
@@ -166,9 +186,11 @@ function drawFig(c, f, x, y, t, o) {
   if (o.down) { c.translate(-10, -5); c.rotate(-Math.PI / 2); c.globalAlpha *= 0.85; }
   if (o.flip) c.scale(-1, 1);
   const ff = o.down ? Object.assign({}, f, { still: true }) : f;
+  if (f.type && f.s && f.s !== 1) c.scale(f.s, f.s); // beasts are drawn at their own scale
   if (f.type === 'rat') drawRat(c, ff, o.down ? 0 : t);
   else if (f.type === 'spider') drawSpider(c, ff, o.down ? 0 : t);
   else if (f.type === 'wolf') drawWolf(c, ff, o.down ? 0 : t);
+  else if (f.type === 'centipede') drawCentipede(c, ff, o.down ? 0 : t);
   else drawHum(c, ff, t);
   c.restore();
 }

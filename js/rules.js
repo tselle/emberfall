@@ -200,8 +200,10 @@ const TURN = {
   ghoul:    [16, 13, 10, 7, 4, 'T', 'T', 'D', 'D'],
   shadow:   [19, 16, 13, 10, 7, 4, 'T', 'T', 'D'],
   wight:    [20, 19, 16, 13, 10, 7, 4, 'T', 'T'],
+  ghast:    [21, 20, 19, 16, 13, 10, 7, 4, 'T'],   // 21: cannot be turned at that level
+  wraith:   [21, 21, 20, 19, 16, 13, 10, 7, 4],
 };
-const TURN_ORDER = ['skeleton', 'zombie', 'ghoul', 'shadow', 'wight'];
+const TURN_ORDER = ['skeleton', 'zombie', 'ghoul', 'shadow', 'wight', 'ghast', 'wraith'];
 function turnLevel(ch) { return ch.cls === 'C' ? ch.lvl : ch.cls === 'P' ? ch.lvl - 2 : 0; }
 
 /* ---- Thief skills (PHB Tables 26-28) ---- */
@@ -283,6 +285,39 @@ function levelUp(ch) {
   ch.maxhp += gain; ch.hp += gain;
   autoPrep(ch);
   return { hp: gain, newSpellLevel: spellSlots(ch).length > before };
+}
+/* drop prepared spells that no longer fit the character's slots */
+function trimPrep(ch) {
+  if (!isCaster(ch)) return;
+  const slots = spellSlots(ch), known = knownSpells(ch);
+  for (const id in ch.prep) if (!known.includes(id) || SPELLS[id].l > slots.length) delete ch.prep[id];
+  slots.forEach((n, i) => { for (const id in ch.prep) while (SPELLS[id].l === i + 1 && prepCount(ch, i + 1) > n && ch.prep[id]) { if (!--ch.prep[id]) delete ch.prep[id]; } });
+  for (const id in ch.mem) if (!ch.prep[id]) delete ch.mem[id]; else ch.mem[id] = Math.min(ch.mem[id], ch.prep[id]);
+}
+/* level drain (wights and worse): lose a level and its hit points; a 1st-level victim dies */
+function drainLevel(ch) {
+  if (ch.lvl <= 1) { ch.dead = true; ch.hp = -10; return false; }
+  const per = Math.max(1, Math.round((ch.maxhp - CLASSES[ch.cls].hd) / (ch.lvl - 1)));
+  ch.lvl--; ch.maxhp = Math.max(1, ch.maxhp - per); ch.hp = Math.min(ch.hp, ch.maxhp);
+  const xp = CLASSES[ch.cls].xp; ch.xp = Math.floor((xp[ch.lvl - 1] + xp[ch.lvl]) / 2);
+  trimPrep(ch);
+  return true;
+}
+/* mages learn one new spell per level gained; this picks for characters advanced automatically */
+const SPELL_PICKS = ['fireball', 'haste', 'lightningBolt', 'holdPerson', 'stinkingCloud', 'mirrorImage', 'strength', 'knock'];
+function pickNewSpell(ch) {
+  const max = spellSlots(ch).length, id = SPELL_PICKS.find(s => SPELLS[s].l <= max && !ch.book.includes(s));
+  if (id) ch.book.push(id);
+  return id;
+}
+/* raise a character to the given level, as if the months between adventures were spent training */
+function advanceTo(ch, lvl) {
+  lvl = Math.min(lvl, MAX_LEVEL);
+  if (ch.dead || ch.lvl >= lvl) return false;
+  while (ch.lvl < lvl) { levelUp(ch); if (ch.cls === 'M') pickNewSpell(ch); }
+  ch.xp = Math.max(ch.xp, CLASSES[ch.cls].xp[ch.lvl - 1]);
+  ch.hp = ch.maxhp; autoPrep(ch); memorizeAll(ch);
+  return true;
 }
 
 /* ---- Equipment helpers ---- */
