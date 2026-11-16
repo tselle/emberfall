@@ -6,7 +6,7 @@
    attacks of opportunity, spells, turning undead, backstab.
    ============================================================ */
 const Combat = (() => {
-  const CW = 1040, CH = 650, HW = 36, HH = 18, US = 1.22, SS = 2; // US: unit draw scale. SS: pixels drawn per layout unit, for a sharp picture on large screens
+  const CW0 = 1040, CH = 650, HW = 36, HH = 18, US = 1.22, SS = 2; // US: unit draw scale. SS: pixels drawn per layout unit, for a sharp picture on large screens
   let S = null, cv, c, raf = 0;
   const THEMES = {
     dungeon: { a: '#5f574b', edge: '#2b2620', block: '#7a6f5d', bg0: '#1b1814', bg1: '#070605' },
@@ -79,6 +79,12 @@ const Combat = (() => {
   function back(id) { const m = MONSTERS[id]; return (m.spells ? 2 : 0) + (m.ranged ? 1 : 0); }
 
   /* ---------------- geometry / rendering ---------------- */
+  let CW = CW0; // the field widens to fill the page
+  function fit() {
+    const w = fitWidth(cv, CH, CW0);
+    if (!w || w === CW) return;
+    CW = w; cv.width = CW * SS; if (S) buildFloor();
+  }
   const OX = () => CW / 2 - (S.w - S.h) * HW / 2, OY = () => (CH - (S.w + S.h) * HH) / 2 + 24;
   const scr = (x, y) => [OX() + (x - y) * HW, OY() + (x + y) * HH + HH];   // tile centre
   function diamond(g, x, y, inset) {
@@ -197,6 +203,7 @@ const Combat = (() => {
   }
 
   function draw(now) {
+    fit();
     c.setTransform(SS, 0, 0, SS, 0, 0);
     c.drawImage(S.floor, 0, 0, CW, CH);
     const u = S.cur, m = S.mode;
@@ -752,7 +759,7 @@ const Combat = (() => {
     const u = S.cur;
     if (S.done) return UI.cmds([]);
     if (!u || !u.pc || !S.endTurn || S.busy) {
-      return UI.cmds([{ label: S.auto ? 'Stop Auto-Battle' : 'Auto-Battle', on: () => { S.auto = !S.auto; showCmds(); }, cls: S.auto ? 'warn' : '' }, { label: u && !u.pc ? u.name + ' acts…' : '…', disabled: true }]);
+      return UI.cmds([{ icon: S.auto ? 'pause' : 'auto', label: S.auto ? 'Stop Auto-Battle' : 'Auto-Battle', cap: S.auto ? 'Stop auto' : 'Auto', on: () => { S.auto = !S.auto; showCmds(); }, cls: S.auto ? 'warn' : '' }, { label: u && !u.pc ? u.name + ' acts…' : '…', disabled: true }]);
     }
     const ch = u.ch, m = S.mode, list = [];
     if (m && m.t === 'spells') {
@@ -772,20 +779,20 @@ const Combat = (() => {
     const adjFoe = foesOf(u).some(e => cheb(e, u) === 1), fresh = !u.attacked;
     if (isCaster(ch)) {
       const why = u.eff.silence ? 'Silenced' : u.hitRound === S.round ? 'Concentration broken: you were hit this round' : !pcSpells(u).length ? 'No spells memorized' : '';
-      list.push({ label: 'Cast', key: 'C', disabled: !!why || !fresh, title: why, on: () => { S.mode = { t: 'spells' }; showCmds(); } });
+      list.push({ icon: 'cast', label: 'Cast', key: 'C', disabled: !!why || !fresh, title: why, on: () => { S.mode = { t: 'spells' }; showCmds(); } });
     }
-    if (turnLevel(ch) > 0 && foesOf(u).some(isUndead)) list.push({ label: 'Turn Undead', key: 'T', disabled: u.turned || !fresh, title: u.turned ? 'Only one attempt per battle' : '', on: () => act(async () => { await turnUndead(u); u.acted = true; }) });
-    if (ch.cls === 'P') list.push({ label: 'Lay on Hands', disabled: ch.layUsed || !fresh, title: 'Heal ' + ch.lvl * 2 + ' hp once per day', on: () => { S.mode = { t: 'target', kind: 'touch', lay: true }; showCmds(); } });
-    if (ch.cls === 'T') list.push({ label: u.hidden ? 'Hidden' : 'Hide', key: 'H', disabled: u.hidden || adjFoe || !fresh, title: 'Hide in Shadows ' + thiefSkills(ch).hs + '%: your next melee attack is a backstab', on: () => act(async () => {
+    if (turnLevel(ch) > 0 && foesOf(u).some(isUndead)) list.push({ icon: 'sun', label: 'Turn Undead', cap: 'Turn', key: 'T', disabled: u.turned || !fresh, title: u.turned ? 'Only one attempt per battle' : '', on: () => act(async () => { await turnUndead(u); u.acted = true; }) });
+    if (ch.cls === 'P') list.push({ icon: 'heart', label: 'Lay on Hands', cap: 'Lay hands', disabled: ch.layUsed || !fresh, title: 'Heal ' + ch.lvl * 2 + ' hp once per day', on: () => { S.mode = { t: 'target', kind: 'touch', lay: true }; showCmds(); } });
+    if (ch.cls === 'T') list.push({ icon: 'hide', label: u.hidden ? 'Hidden' : 'Hide', key: 'H', disabled: u.hidden || adjFoe || !fresh, title: 'Hide in Shadows ' + thiefSkills(ch).hs + '%: your next melee attack is a backstab', on: () => act(async () => {
       if (rnd(100) <= thiefSkills(ch).hs) { u.hidden = true; log(u.name + ' melts into the shadows.', 'good'); } else log(u.name + ' fails to find cover.', 'dim');
       u.acted = true;
     }) });
-    if (ch.inv.some(id => item(id).t === 'p')) list.push({ label: 'Use Item', key: 'U', disabled: !fresh, on: () => { S.mode = { t: 'items' }; showCmds(); } });
+    if (ch.inv.some(id => item(id).t === 'p')) list.push({ icon: 'flask', label: 'Use Item', cap: 'Item', key: 'U', disabled: !fresh, on: () => { S.mode = { t: 'items' }; showCmds(); } });
     const hurtAlly = S.units.find(a => a.pc && a !== u && !a.gone && a.hp <= 0 && !a.ch.dead && !a.stable && cheb(a, u) === 1);
-    if (hurtAlly) list.push({ label: 'Bandage ' + hurtAlly.name.split(' ')[0], disabled: !fresh, on: () => act(async () => { hurtAlly.stable = true; log(u.name + ' binds ' + hurtAlly.name + '\'s wounds.', 'good'); u.acted = true; }) });
-    if (u.x === 0 || u.y === 0 || u.x === S.w - 1 || u.y === S.h - 1) list.push({ label: 'Flee Battle', cls: 'warn', on: () => act(async () => { u.gone = true; u.fledPC = true; log(u.name + ' flees the battle.', 'bad'); u.acted = true; }) });
-    list.push({ label: 'End Turn', key: 'Space', on: () => { if (!S.busy && S.endTurn) S.endTurn(); } });
-    list.push({ label: 'Auto-Battle', key: 'Q', title: 'Let the computer fight for the party', on: () => { S.auto = true; act(async () => { await aiTurn(u); u.acted = true; }); } });
+    if (hurtAlly) list.push({ icon: 'plus', label: 'Bandage ' + hurtAlly.name.split(' ')[0], cap: 'Bandage', disabled: !fresh, on: () => act(async () => { hurtAlly.stable = true; log(u.name + ' binds ' + hurtAlly.name + '\'s wounds.', 'good'); u.acted = true; }) });
+    if (u.x === 0 || u.y === 0 || u.x === S.w - 1 || u.y === S.h - 1) list.push({ icon: 'flee', label: 'Flee Battle', cap: 'Flee', cls: 'warn', on: () => act(async () => { u.gone = true; u.fledPC = true; log(u.name + ' flees the battle.', 'bad'); u.acted = true; }) });
+    list.push({ icon: 'hourglass', label: 'End Turn', cap: 'End turn', key: 'Space', on: () => { if (!S.busy && S.endTurn) S.endTurn(); } });
+    list.push({ icon: 'auto', label: 'Auto-Battle', cap: 'Auto', key: 'Q', title: 'Let the computer fight for the party', on: () => { S.auto = true; act(async () => { await aiTurn(u); u.acted = true; }); } });
     const hint = u.attacked ? 'Attacks remaining — click an enemy, or end the turn.' : 'Click a blue square to move, an enemy to attack' + (rwpn(ch) ? ' (missile fire needs a clear line and no adjacent foe).' : '.');
     UI.cmds(list, hint);
   }

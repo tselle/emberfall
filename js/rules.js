@@ -7,6 +7,12 @@ const rnd = n => Math.floor(Math.random() * n) + 1;
 const dice = (n, s) => { let t = 0; for (let i = 0; i < n; i++) t += rnd(s); return t; };
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+/* How wide (in its own drawing units) a canvas of fixed drawing height should be to fill the box it is shown in.
+   The picture is never narrower than `min` nor wider than 2.8 times its height. Returns 0 while the canvas is hidden. */
+function fitWidth(cv, height, min) {
+  const w = cv.clientWidth, hh = cv.clientHeight;
+  return w && hh ? Math.max(min, Math.round(height * Math.min(w / hh, 2.8) / 2) * 2) : 0;
+}
 function rollDice(spec) {
   if (typeof spec === 'number') return spec;
   const m = /^(\d+)d(\d+)([+-]\d+)?$/.exec(spec);

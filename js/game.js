@@ -413,11 +413,18 @@ async function camp() {
   log('You rest undisturbed for eight hours. Spells are memorized.', 'good');
   refreshAll();
 }
+/* the icons common to town, dungeon and wilderness */
+function sharedCmds() {
+  const open = fn => () => { if (!busy()) fn(); };
+  return [{ icon: 'map', label: 'Map', key: 'M', on: open(mapDialog) }, { icon: 'journal', label: 'Journal', key: 'J', on: open(journalDialog) },
+    { icon: 'beast', label: 'Bestiary', key: 'B', on: open(bestiaryDialog) }, { icon: 'menu', label: 'Menu', key: 'Esc', on: menuDialog }];
+}
 function exploreCmds() {
   UI.cmds([
-    { label: '↶ Turn', key: 'A', on: () => turn(-1) }, { label: 'Forward', key: 'W', on: () => move(1, 0) }, { label: 'Turn ↷', key: 'D', on: () => turn(1) },
-    { label: 'Back', key: 'S', on: () => move(-1, 0) }, { label: 'Search', key: 'F', on: search }, { label: 'Camp', key: 'R', on: camp }, { label: 'Map', key: 'M', on: () => { if (!busy()) mapDialog(); } }, { label: 'Journal', key: 'J', on: () => { if (!busy()) journalDialog(); } }, { label: 'Menu', key: 'Esc', on: menuDialog },
-  ], 'Click a party member for equipment and spells.');
+    { icon: 'turnL', label: 'Turn left', cap: 'Turn', key: 'A', on: () => turn(-1) }, { icon: 'fwd', label: 'Forward', key: 'W', on: () => move(1, 0) }, { icon: 'turnR', label: 'Turn right', cap: 'Turn', key: 'D', on: () => turn(1) },
+    { icon: 'fwd', rot: 180, label: 'Back', key: 'S', on: () => move(-1, 0) }, { icon: 'search', label: 'Search', key: 'F', on: search }, { icon: 'camp', label: 'Camp', key: 'R', on: camp },
+    ...sharedCmds(),
+  ], 'P shows the party. Open a member for equipment and spells.');
 }
 function gameOver() {
   if (X.over) return; X.over = true;
@@ -477,6 +484,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (!G || !$('#game').classList.contains('active')) return;
+  if (e.key.toLowerCase() === 'p' && !e.ctrlKey && !e.metaKey) { toggleParty(); e.preventDefault(); return; }
   if (Combat.active) { if (Combat.onKey(e)) e.preventDefault(); return; }
   const k = e.key.toLowerCase();
   let used = true;
@@ -510,10 +518,15 @@ document.addEventListener('keydown', e => {
   else used = false;
   if (used) e.preventDefault();
 });
+/* the pictures follow the shape of the window */
+window.addEventListener('resize', () => {
+  if (!G || !X.def || !$('#game').classList.contains('active') || Combat.active) return;
+  if (isWild()) Over.draw(); else draw();
+});
 window.addEventListener('DOMContentLoaded', () => {
   View3D.init($('#view3d'));
   Over.init($('#overCanvas')); Over.onStep(wildMove);
-  initMinimap();
+  initMinimap(); initParty();
   Nav.init($('#navlayer'));
   showTitle();
 });

@@ -60,11 +60,53 @@ function pickMember(title, filter) {
 }
 
 /* ---------------- command bar / party panel ---------------- */
+/* line icons for the command bar, drawn on a 24-unit grid */
+const ICONS = {
+  fwd: 'M12 20V5M5 12l7-7 7 7', diag: 'M7 17L17 7M8 7h9v9',
+  turnL: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 6 6v5', turnR: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0-6 6v5',
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-5-5',
+  camp: 'M3 20h18M12 4L4 20M12 4l8 16M12 12l-3 8M12 12l3 8',
+  map: 'M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14',
+  journal: 'M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4zM5 17a3 3 0 0 1 3-3h11M9 8h6',
+  beast: 'M12 3a8 8 0 0 0-5 14.2V20h10v-2.8A8 8 0 0 0 12 3zM8.5 11.5h1M14.5 11.5h1M10.5 20v-2M13.5 20v-2',
+  menu: 'M4 6h16M4 12h16M4 18h16',
+  party: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5',
+  visit: 'M14 4h5v16h-5M3 12h11M10 8l4 4-4 4',
+  cast: 'M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2z',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2',
+  heart: 'M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z',
+  hide: 'M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4 4l16 16',
+  flask: 'M10 3h4M10.5 3v5L6 17a3 3 0 0 0 2.7 4h6.6A3 3 0 0 0 18 17l-4.5-9V3M8 15h8',
+  hourglass: 'M6 3h12M6 21h12M7 3v3l5 6 5-6V3M7 21v-3l5-6 5 6v3',
+  auto: 'M4 5l8 7-8 7zM13 5l8 7-8 7z', pause: 'M8 5v14M16 5v14',
+  flee: 'M10 4H5v16h5M21 12H10M17 8l4 4-4 4', plus: 'M12 5v14M5 12h14',
+};
+function icon(name, rot) {
+  const s = h('span', { class: 'ic' });
+  s.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"' + (rot ? ' style="transform:rotate(' + rot + 'deg)"' : '') + '><path d="' + ICONS[name] + '"/></svg>';
+  return s;
+}
+/* the party list slides in from the left edge; the choice is remembered on this device */
+function toggleParty(open) {
+  const el = $('#party'), on = open === undefined ? !el.classList.contains('open') : !!open;
+  el.classList.toggle('open', on); $('#partyBtn').classList.toggle('on', on);
+  try { localStorage.setItem('emberfall.party', on ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+}
+function initParty() {
+  let on = false;
+  try { on = localStorage.getItem('emberfall.party') === '1'; } catch (e) { /* storage unavailable */ }
+  $('#partyBtn').addEventListener('click', () => toggleParty());
+  toggleParty(on);
+}
+
 const UI = {
   cmds(list, hint) {
     $('#cmdhint').textContent = hint || '';
     $('#cmdbar').replaceChildren(...list.map(b => {
-      const el = h('button', { class: 'btn cmd ' + (b.cls || ''), disabled: b.disabled, title: b.title, onclick: b.on }, b.label, b.key ? h('kbd', { text: b.key }) : null);
+      const el = b.icon
+        ? h('button', { class: 'btn cmd ico ' + (b.cls || ''), disabled: b.disabled, title: (b.title ? b.title + ' · ' : '') + b.label + (b.key ? ' (' + b.key + ')' : ''), 'aria-label': b.label, onclick: b.on },
+            icon(b.icon, b.rot), h('span', { class: 'cap', text: b.cap || b.label }), b.key ? h('kbd', { text: b.key }) : null)
+        : h('button', { class: 'btn cmd ' + (b.cls || ''), disabled: b.disabled, title: b.title, onclick: b.on }, b.label, b.key ? h('kbd', { text: b.key }) : null);
       if (b.key) el.dataset.key = b.key.toLowerCase();
       return el;
     }));
@@ -75,6 +117,10 @@ const UI = {
   },
   refreshParty() {
     if (!G) return;
+    $('#partyBtn').replaceChildren(icon('party'), h('span', { class: 'hpips' }, P().map(ch => {
+      const k = ch.dead ? 0 : clamp(ch.hp / ch.maxhp, 0, 1);
+      return h('i', { title: ch.name + ': ' + ch.hp + '/' + ch.maxhp }, h('b', { style: 'height:' + Math.max(k * 100, ch.dead ? 0 : 8) + '%;background:' + (k > 0.5 ? '#5fce6a' : k > 0.25 ? '#e3b23c' : '#e2493b') }));
+    })));
     $('#party').replaceChildren(...P().map((ch, i) => {
       const k = clamp(ch.hp / ch.maxhp, 0, 1), st = statusOf(ch);
       return h('div', { class: 'pcard' + (ch.dead ? ' dead' : ch.hp <= 0 ? ' down' : ''), onclick: () => { if (!Combat.active && !modals.length) showSheet(ch); }, title: 'Open character sheet (' + (i + 1) + ')' },
@@ -511,7 +557,7 @@ function helpDialog() {
   const sec = (t, lines) => [h('h3', { text: t }), h('ul', null, lines.map(l => h('li', { text: l })))];
   modal({ title: 'How to Play', wide: true, body: h('div', { class: 'help' },
     sec('Campaigns and Adventures', ['New Game opens the adventure chooser. Each module has its own home base, dungeons and commissions, and varies in starting level, difficulty (Easy to Deadly) and size (Short to Large).', 'Adventures above 1st level start the ready-made heroes at that level with suitable gear. Characters you create are trained up to it too, with extra gold.', 'You can also bring your company from any saved game. Anyone below the module\'s starting level is trained up to it.', 'Finish an adventure\'s last commission to complete it; you will be offered the next in the saga. Choose Campaign from the menu to travel between adventures at any time. Unfinished progress is kept.']),
-    sec('Exploring', ['W / ↑ move forward, S / ↓ step back, A / ← and D / → turn, Q / E sidestep.', 'Walk into a door to open it, and into a building\'s door to enter.', 'F searches for secret doors. R makes camp (dungeons only; you may be disturbed).', 'Click a party member or press 1–6 for their character sheet: equipment, spells and items.', 'M opens the full map of the area, with buildings, stairs, chests you have seen and dropped gear marked. Rest the mouse on the corner map to name a square.', 'B opens the bestiary: a sketch of every kind of creature you have met, and, once you have fought it, its strengths and weaknesses.', 'J opens the journal: your commissions, what each one asks of you, and dated notes of what you have seen and heard.', 'Anything dropped from a character sheet stays on the ground where you stand. Walk back over it, or use the sheet, to pick it up.', 'On a tablet or phone, tap the ✥ button at the top left of the view (or Touch Controls in the menu) for on-screen movement buttons: right side, left side, both, or off. Hold a button to keep moving.', 'Esc opens the menu (save, load, help).']),
+    sec('Exploring', ['W / ↑ move forward, S / ↓ step back, A / ← and D / → turn, Q / E sidestep.', 'Walk into a door to open it, and into a building\'s door to enter.', 'F searches for secret doors. R makes camp (dungeons only; you may be disturbed).', 'P (or the party button at the top left, which also shows everyone\'s health as bars) slides the party list in and out. Click a party member or press 1–6 for their character sheet: equipment, spells and items.', 'M opens the full map of the area, with buildings, stairs, chests you have seen and dropped gear marked. Rest the mouse on the corner map to name a square.', 'B opens the bestiary: a sketch of every kind of creature you have met, and, once you have fought it, its strengths and weaknesses.', 'J opens the journal: your commissions, what each one asks of you, and dated notes of what you have seen and heard.', 'Anything dropped from a character sheet stays on the ground where you stand. Walk back over it, or use the sheet, to pick it up.', 'On a tablet or phone, tap the ✥ button at the top left of the view (or Touch Controls in the menu) for on-screen movement buttons: right side, left side, both, or off. Hold a button to keep moving.', 'Esc opens the menu (save, load, help).']),
     sec('Overland Travel', ['Leave Emberfall by the south gate to enter the Emberwild. W/A/S/D move north/west/south/east, Q/E/Z/C move diagonally, or click the map.', 'Each square is a mile. A party moves at its slowest member\'s rate (12 covers about 24 miles in a ten-hour day); roads halve travel time, forest and hills double it, fen triples it.', 'After ten hours on the march the party is weary and slower until it camps (R). Night travel is more dangerous and you see less.', 'Encounters depend on terrain and time of day. Spot them first and you may ambush or slip away; otherwise you may fight, try to evade (faster parties escape more easily) or parley with intelligent foes.', 'Step onto a place to visit it, or press Enter while standing on it.']),
     sec('Combat', ['Initiative is rolled each round: d10 plus weapon speed. Low goes first.', 'Click a highlighted square to move; click an adjacent enemy to attack; click a distant enemy to fire a missile weapon.', 'Moving away from an adjacent enemy gives it a free attack.', 'Spellcasters who are hit earlier in the round lose their concentration and cannot cast.', 'A character at 0 hp or below is dying and loses 1 hp each round until bandaged; at -10 they are dead.', 'Thieves backstab (+4 to hit, multiplied damage) when hidden or when an ally is on the opposite side of the target.', 'Space ends the turn. Stand on the edge of the field to flee.']),
     sec('The Rules', ['Second Edition AD&D: THAC0 and descending Armor Class, five saving throw categories, class experience tables, racial abilities and class restrictions.', 'Spells must be memorized and are regained only by resting. Choose them on the character sheet.', 'Levels are gained at the Training Hall once you have the experience (and the fee).', 'Experience comes from slain monsters, recovered treasure (1 XP per gold piece) and the Reeve\'s commissions.'])) });

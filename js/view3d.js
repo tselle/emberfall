@@ -5,10 +5,10 @@
    Renders only on demand, so it costs nothing while idle.
    ============================================================ */
 const View3D = (() => {
-  // W x H: render size. TS: the 64-unit grid textures are designed on. TR: the resolution they are painted at.
-  const W = 1280, H = 800, FOV = 0.66, TS = 64, TR = 256, MIPS = 4;
+  // W x H: render size (W follows the shape of the view on the page; the vertical field of view stays the same). TS: the 64-unit grid textures are designed on. TR: the resolution they are painted at.
+  const H = 800, W0 = 1280, FOV = 0.66, TS = 64, TR = 256, MIPS = 4;
   let cv, ctx, img, buf;
-  const zbuf = new Float32Array(W);
+  let W = W0, FV = FOV, zbuf = new Float32Array(W), SKYU = new Int32Array(W);
   const HP = new Float32Array(4), HW = new Float32Array(4), HS = new Array(4), HD = new Uint8Array(4); // ray hits per column
   const TEX = {};
 
@@ -365,6 +365,14 @@ const View3D = (() => {
     buf = new Uint32Array(img.data.buffer);
     buildTextures();
   }
+  /* match the picture's width to the box it is shown in */
+  function fit() {
+    const w = fitWidth(cv, H, W0);
+    if (!w || w === W) return;
+    W = w; FV = FOV * W / W0; cv.width = W;
+    img = ctx.createImageData(W, H); buf = new Uint32Array(img.data.buffer);
+    zbuf = new Float32Array(W); SKYU = new Int32Array(W);
+  }
 
   /* Prepare a map for rendering: cell codes, wall textures, floor variants */
   function prepare(def, cells) {
@@ -416,7 +424,6 @@ const View3D = (() => {
      two ranges of hills) and scrolled by the view angle. */
   const PW = 4096, HALF = H >> 1;
   let PAN = null;
-  const SKYU = new Int32Array(W);
   function buildSky() {
     const c = document.createElement('canvas'); c.width = PW; c.height = HALF;
     const g = c.getContext('2d', { willReadFrequently: true });
@@ -453,7 +460,8 @@ const View3D = (() => {
   const AOR = 0.3; // reach of the contact shadow where floor meets wall, in squares
 
   function render(cam, M, sprites) {
-    const ca = Math.cos(cam.a), sa = Math.sin(cam.a), px = cam.x, py = cam.y, plx = -sa * FOV, ply = ca * FOV;
+    fit();
+    const ca = Math.cos(cam.a), sa = Math.sin(cam.a), px = cam.x, py = cam.y, plx = -sa * FV, ply = ca * FV;
     const half = HALF, mw = M.w, mh = M.h, out = M.outdoor;
     const fogR = out ? 70 : 4, fogG = out ? 62 : 3, fogB = out ? 78 : 6, k = out ? 0.014 : 0.075;
     const ftex = M.floor, gtex = TEX.grass, ctex = M.ceil, fl = M.fl, ao = M.ao, aoK = out ? 0.36 : 0.5;
@@ -462,7 +470,7 @@ const View3D = (() => {
     if (out) {
       if (!PAN) buildSky();
       const tau = Math.PI * 2;
-      for (let x = 0; x < W; x++) { let u = (cam.a + Math.atan((2 * x / W - 1) * FOV)) / tau; u -= Math.floor(u); SKYU[x] = (u * PW) | 0; }
+      for (let x = 0; x < W; x++) { let u = (cam.a + Math.atan((2 * x / W - 1) * FV)) / tau; u -= Math.floor(u); SKYU[x] = (u * PW) | 0; }
       for (let y = 0; y < half; y++) { const o = y * W, po = y * PW; for (let x = 0; x < W; x++) buf[o + x] = PAN[po + SKYU[x]]; }
     }
     // --- floor and ceiling ---
@@ -471,7 +479,7 @@ const View3D = (() => {
       const f = 1 / (1 + rowD * rowD * k), fi = 1 - f, fr = fogR * fi, fg = fogG * fi, fb = fogB * fi;
       const stepX = rowD * 2 * plx / W, stepY = rowD * 2 * ply / W;
       let fx = px + rowD * (ca - plx), fy = py + rowD * (sa - ply);
-      const lv = mipFor(rowD * 2 * FOV / W * TR), ts = TR >> lv, tm = ts - 1;
+      const lv = mipFor(rowD * 2 * FV / W * TR), ts = TR >> lv, tm = ts - 1;
       const fT = ftex.mip[lv], gT = gtex.mip[lv], cT = ctex.mip[lv];
       const o = y * W, o2 = (H - 1 - y) * W;
       for (let x = 0; x < W; x++, fx += stepX, fy += stepY) {
@@ -624,5 +632,5 @@ const View3D = (() => {
     c.beginPath(); c.moveTo(cs * 0.75 * k, 0); c.lineTo(-cs * 0.55 * k, -cs * 0.55 * k); c.lineTo(-cs * 0.2 * k, 0); c.lineTo(-cs * 0.55 * k, cs * 0.55 * k); c.closePath(); c.fill(); c.stroke(); c.restore();
     return (canvas._geo = { ox, oy, cs, w: M.w, h: M.h });
   }
-  return { init, prepare, render, minimap, MAPCOL, W, H };
+  return { init, prepare, render, minimap, MAPCOL, get W() { return W; }, H };
 })();

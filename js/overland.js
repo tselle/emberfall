@@ -61,7 +61,8 @@ const WILD_ENC = {
 };
 
 const Over = (() => {
-  const TS = 44, CW = 1040, CH = 650, Z = 1.5, VW = CW / Z, VH = CH / Z; // Z: zoom of the view
+  const TS = 44, CW0 = 1040, CH = 650, Z = 1.5, VH = CH / Z; // Z: zoom of the view
+  let CW = CW0, VW = CW / Z; // the view widens to fill the page
   const WZ = 2, SS = 2; // WZ: pixels per map unit the world is painted at. SS: canvas pixels per layout unit.
   let cv, c, def = null, W = 0, H = 0, world = null, mini = null, fog = null, vign = null, step = null;
   const cam = { x: 0, y: 0 }, vis = new Set();
@@ -77,13 +78,21 @@ const Over = (() => {
     cv.addEventListener('click', e => { const t = tileAt(e); if (t && step) step(Math.sign(t.x - G.x), Math.sign(t.y - G.y)); });
     cv.addEventListener('mousemove', e => { const t = tileAt(e); if (!t || !hover || t.x !== hover.x || t.y !== hover.y) { hover = t; if (!anim) draw(); } });
     cv.addEventListener('mouseleave', () => { hover = null; if (!anim) draw(); });
+    buildVign();
+  }
+  function buildVign() {
     vign = document.createElement('canvas'); vign.width = CW; vign.height = CH;
     const v = vign.getContext('2d'), g = v.createRadialGradient(CW / 2, CH / 2, CH * 0.45, CW / 2, CH / 2, CW * 0.62);
     g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.45)'); v.fillStyle = g; v.fillRect(0, 0, CW, CH);
   }
+  function fit() {
+    const w = fitWidth(cv, CH, CW0);
+    if (!w || w === CW) return;
+    CW = w; VW = CW / Z; cv.width = CW * SS; buildVign();
+  }
   function view() {
     const px = cam.x * TS + TS / 2, py = cam.y * TS + TS / 2;
-    return [clamp(px - VW / 2, 0, W * TS - VW), clamp(py - VH / 2, 0, H * TS - VH)];
+    return [clamp(px - VW / 2, 0, Math.max(0, W * TS - VW)), clamp(py - VH / 2, 0, H * TS - VH)];
   }
   function tileAt(e) {
     if (!def) return null;
@@ -330,6 +339,7 @@ const Over = (() => {
   function night() { const h = hour(); return h < 5.5 || h >= 20; }
   function draw() {
     if (!def || !c) return;
+    fit();
     const [vx, vy] = view();
     c.setTransform(SS, 0, 0, SS, 0, 0);
     c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
@@ -478,12 +488,12 @@ function wildEnsureSeen() {
 function wildCmds() {
   const go = (dx, dy) => () => wildMove(dx, dy);
   UI.cmds([
-    { label: '↖', key: 'Q', on: go(-1, -1) }, { label: 'North', key: 'W', on: go(0, -1) }, { label: '↗', key: 'E', on: go(1, -1) },
-    { label: 'West', key: 'A', on: go(-1, 0) }, { label: 'South', key: 'S', on: go(0, 1) }, { label: 'East', key: 'D', on: go(1, 0) },
-    { label: '↙', key: 'Z', on: go(-1, 1) }, { label: '↘', key: 'C', on: go(1, 1) },
-    { label: 'Visit', key: 'Enter', on: () => { const k = Over.at(G.x, G.y); if (X.def.sites[k]) visitSite(k); else if (groundAt().length) lootHere(); else log('There is nothing here but ' + Over.terr(G.x, G.y).name.toLowerCase() + '.', 'dim'); } },
-    { label: 'Camp', key: 'R', on: wildCamp }, { label: 'Menu', key: 'Esc', on: menuDialog },
-  ], 'Click the map to walk toward a point. M opens the full map, J the journal, B the bestiary. Travel time depends on terrain and your slowest member\'s movement rate.');
+    { icon: 'diag', rot: -90, label: 'North-west', cap: 'NW', key: 'Q', on: go(-1, -1) }, { icon: 'fwd', label: 'North', key: 'W', on: go(0, -1) }, { icon: 'diag', label: 'North-east', cap: 'NE', key: 'E', on: go(1, -1) },
+    { icon: 'fwd', rot: -90, label: 'West', key: 'A', on: go(-1, 0) }, { icon: 'fwd', rot: 180, label: 'South', key: 'S', on: go(0, 1) }, { icon: 'fwd', rot: 90, label: 'East', key: 'D', on: go(1, 0) },
+    { icon: 'diag', rot: 180, label: 'South-west', cap: 'SW', key: 'Z', on: go(-1, 1) }, { icon: 'diag', rot: 90, label: 'South-east', cap: 'SE', key: 'C', on: go(1, 1) },
+    { icon: 'visit', label: 'Visit', key: 'Enter', on: () => { const k = Over.at(G.x, G.y); if (X.def.sites[k]) visitSite(k); else if (groundAt().length) lootHere(); else log('There is nothing here but ' + Over.terr(G.x, G.y).name.toLowerCase() + '.', 'dim'); } },
+    { icon: 'camp', label: 'Camp', key: 'R', on: wildCamp }, ...sharedCmds(),
+  ], 'Click the map to walk toward a point. Travel time depends on terrain and your slowest member\'s movement rate.');
 }
 function revealSite(k) { if (!G.seen.wild) { const g = MAPS.wild.grid; G.seen.wild = new Array(g.length * g[0].length).fill(0); } Over.prepare(MAPS.wild); Over.revealAround(k, 1); }
 
