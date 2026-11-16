@@ -8,7 +8,7 @@ const View3D = (() => {
   // W x H: render size (W follows the shape of the view on the page; the vertical field of view stays the same). TS: the 64-unit grid textures are designed on. TR: the resolution they are painted at.
   const H = 800, W0 = 1280, FOV = 0.66, TS = 64, TR = 256, MIPS = 4;
   let cv, ctx, img, buf;
-  let W = W0, FV = FOV, zbuf = new Float32Array(W), SKYU = new Int32Array(W);
+  let W = W0, FV = FOV, zbuf = new Float32Array(W), SKYU = new Int32Array(W), FT = new Int32Array(W); // FT: the row where the floor comes out from under the nearest wall, per column
   const HP = new Float32Array(4), HW = new Float32Array(4), HS = new Array(4), HD = new Uint8Array(4); // ray hits per column
   const TEX = {};
 
@@ -21,7 +21,9 @@ const View3D = (() => {
     const x = c.getContext('2d', { willReadFrequently: true });
     x.scale(TR / TS, TR / TS); fn(x); x.setTransform(1, 0, 0, 1, 0, 0);
     const id = x.getImageData(0, 0, TR, TR), d = id.data, r = lcg(7919 * grainSeed++);
+    let opaque = true;
     for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 255) opaque = false;
       if (!d[i + 3]) continue;
       const k = 0.955 + r() * 0.09;
       d[i] = Math.min(255, d[i] * k); d[i + 1] = Math.min(255, d[i + 1] * k); d[i + 2] = Math.min(255, d[i + 2] * k);
@@ -36,7 +38,7 @@ const View3D = (() => {
       mip.push(new Uint32Array(g.getImageData(0, 0, sz, sz).data.buffer.slice(0)));
       src = m;
     }
-    const t = mip[0]; t.mip = mip;
+    const t = mip[0]; t.mip = mip; t.opaque = opaque; // opaque: nothing shows through it
     return t;
   }
   function speckle(x, r, n, a) {
@@ -371,7 +373,7 @@ const View3D = (() => {
     if (!w || w === W) return;
     W = w; FV = FOV * W / W0; cv.width = W;
     img = ctx.createImageData(W, H); buf = new Uint32Array(img.data.buffer);
-    zbuf = new Float32Array(W); SKYU = new Int32Array(W);
+    zbuf = new Float32Array(W); SKYU = new Int32Array(W); FT = new Int32Array(W);
   }
 
   /* Prepare a map for rendering: cell codes, wall textures, floor variants */
@@ -459,10 +461,70 @@ const View3D = (() => {
   const mipFor = tpp => tpp < 1.5 ? 0 : tpp < 3 ? 1 : tpp < 6 ? 2 : 3; // texels per screen pixel -> mip level
   const AOR = 0.3; // reach of the contact shadow where floor meets wall, in squares
 
-  function render(cam, M, sprites) {
+  /* Draw the view. `moving` marks a frame of a step or turn. On a device too slow to draw those sharp in time
+     they are drawn at a half, a third or a quarter of the size and scaled up, so that movement stays smooth;
+     the caller draws a sharp frame once the company stands still (see `coarse`). The size is chosen when a
+     movement starts and kept until the next still frame. */
+  const BUDGET = 24; // ms a moving frame may take
+  let cost = 0, scale = 1, latched = false, coarse = false; // cost: ms a full-size frame takes on this device
+  const LOW = {}; // the small pictures coarse frames are drawn on, by scale
+  function surface(s) {
+    const w = Math.max(2, (W / s) | 0), hh = ((H / s) | 0) & ~1;
+    let L = LOW[s];
+    if (!L || L.w !== w) {
+      const c = document.createElement('canvas'); c.width = w; c.height = hh;
+      const x = c.getContext('2d'), im = x.createImageData(w, hh);
+      L = LOW[s] = { cv: c, ctx: x, img: im, buf: new Uint32Array(im.data.buffer), w, h: hh };
+    }
+    return L;
+  }
+  function render(cam, M, sprites, moving) {
     fit();
+    if (!moving) { scale = 1; latched = false; }
+    else if (!latched) { latched = true; scale = cost <= BUDGET ? 1 : cost <= BUDGET * 4 ? 2 : cost <= BUDGET * 9 ? 3 : 4; }
+    let t0 = 0;
+    if (scale === 1) {
+      if (!cost) paint(cam, M, sprites, W, H, buf); // the very first frame is slow on any device, so it is painted twice and the second one timed
+      t0 = performance.now();
+      paint(cam, M, sprites, W, H, buf); ctx.putImageData(img, 0, 0);
+    } else {
+      const L = surface(scale);
+      paint(cam, M, sprites, L.w, L.h, L.buf); L.ctx.putImageData(L.img, 0, 0);
+      ctx.imageSmoothingEnabled = true; ctx.drawImage(L.cv, 0, 0, W, H);
+    }
+    coarse = scale > 1;
+    if (!coarse) { // only full-size frames are timed; a quick one counts for more, so one slow frame does not blur the next walk
+      const t = performance.now() - t0;
+      cost = !cost ? t : t < cost ? cost * 0.3 + t * 0.7 : cost * 0.75 + t * 0.25;
+    }
+  }
+  /* Walk one ray across the map, past low walls to find the taller ones behind.
+     Fills HP, HW, HS and HD, nearest wall first, and returns how many were found. */
+  function cast(M, px, py, rx, ry) {
+    const mw = M.w, mh = M.h, tw = M.tw, maxH = M.maxH;
+    let mx = Math.floor(px), my = Math.floor(py);
+    const dx = Math.abs(1 / rx), dy = Math.abs(1 / ry);
+    let stepX, stepY, sdx, sdy, side = 0, n = 0, best = 0;
+    if (rx < 0) { stepX = -1; sdx = (px - mx) * dx; } else { stepX = 1; sdx = (mx + 1 - px) * dx; }
+    if (ry < 0) { stepY = -1; sdy = (py - my) * dy; } else { stepY = 1; sdy = (my + 1 - py) * dy; }
+    for (let i = 0; i < 64; i++) {
+      if (sdx < sdy) { sdx += dx; mx += stepX; side = 0; } else { sdy += dy; my += stepY; side = 1; }
+      if (mx < 0 || my < 0 || mx >= mw || my >= mh) break;
+      const st = tw[my * mw + mx];
+      if (!st || st.length <= best) continue;
+      const perp = Math.max(0.02, side === 0 ? sdx - dx : sdy - dy);
+      let wx = side === 0 ? py + perp * ry : px + perp * rx; wx -= Math.floor(wx);
+      if ((side === 0 && rx < 0) || (side === 1 && ry > 0)) wx = 1 - wx;
+      HP[n] = perp; HW[n] = wx; HS[n] = st; HD[n] = side; n++;
+      best = st.length;
+      if (best >= maxH || n >= 4) break;
+    }
+    return n;
+  }
+  /* paint one frame, W x H pixels, into buf */
+  function paint(cam, M, sprites, W, H, buf) {
     const ca = Math.cos(cam.a), sa = Math.sin(cam.a), px = cam.x, py = cam.y, plx = -sa * FV, ply = ca * FV;
-    const half = HALF, mw = M.w, mh = M.h, out = M.outdoor;
+    const half = H >> 1, mw = M.w, mh = M.h, out = M.outdoor;
     const fogR = out ? 70 : 4, fogG = out ? 62 : 3, fogB = out ? 78 : 6, k = out ? 0.014 : 0.075;
     const ftex = M.floor, gtex = TEX.grass, ctex = M.ceil, fl = M.fl, ao = M.ao, aoK = out ? 0.36 : 0.5;
 
@@ -471,10 +533,25 @@ const View3D = (() => {
       if (!PAN) buildSky();
       const tau = Math.PI * 2;
       for (let x = 0; x < W; x++) { let u = (cam.a + Math.atan((2 * x / W - 1) * FV)) / tau; u -= Math.floor(u); SKYU[x] = (u * PW) | 0; }
-      for (let y = 0; y < half; y++) { const o = y * W, po = y * PW; for (let x = 0; x < W; x++) buf[o + x] = PAN[po + SKYU[x]]; }
+      for (let y = 0; y < half; y++) { const o = y * W, po = ((y * HALF / half) | 0) * PW; for (let x = 0; x < W; x++) buf[o + x] = PAN[po + SKYU[x]]; }
+    }
+    // --- where each column's nearest wall stands: the floor and ceiling behind a solid wall need no drawing ---
+    let fy0 = H;
+    for (let x = 0; x < W; x++) {
+      const camX = 2 * x / W - 1, n = cast(M, px, py, ca + plx * camX, sa + ply * camX);
+      let ft = half;
+      if (!n) zbuf[x] = 1e9;
+      else {
+        zbuf[x] = HP[0];
+        const st = HS[0];
+        let solid = st[0].opaque;
+        if (!out) for (let i = 1; i < st.length; i++) solid = solid && st[i].opaque;
+        if (solid) ft = Math.min(H, Math.floor(half + H / HP[0] / 2));
+      }
+      FT[x] = ft; if (ft < fy0) fy0 = ft;
     }
     // --- floor and ceiling ---
-    for (let y = half; y < H; y++) {
+    for (let y = fy0; y < H; y++) {
       const rowD = half / (y - half + 0.5);
       const f = 1 / (1 + rowD * rowD * k), fi = 1 - f, fr = fogR * fi, fg = fogG * fi, fb = fogB * fi;
       const stepX = rowD * 2 * plx / W, stepY = rowD * 2 * ply / W;
@@ -483,6 +560,7 @@ const View3D = (() => {
       const fT = ftex.mip[lv], gT = gtex.mip[lv], cT = ctex.mip[lv];
       const o = y * W, o2 = (H - 1 - y) * W;
       for (let x = 0; x < W; x++, fx += stepX, fy += stepY) {
+        if (y < FT[x]) continue;
         const cx = Math.floor(fx), cy = Math.floor(fy), u = fx - cx, v = fy - cy;
         const ti = (((v * ts) & tm) * ts) + ((u * ts) & tm);
         let tex = fT, sh = f;
@@ -503,29 +581,9 @@ const View3D = (() => {
         if (!out) { p = cT[ti]; const fc = sh * 0.8; buf[o2 + x] = 0xff000000 | (((p >> 16 & 255) * fc + fb) << 16) | (((p >> 8 & 255) * fc + fg) << 8) | ((p & 255) * fc + fr); }
       }
     }
-    // --- walls: walk each ray past low walls to find taller ones behind, then paint far to near ---
-    const tw = M.tw, maxH = M.maxH;
+    // --- walls, painted far to near ---
     for (let x = 0; x < W; x++) {
-      const camX = 2 * x / W - 1, rx = ca + plx * camX, ry = sa + ply * camX;
-      let mx = Math.floor(px), my = Math.floor(py);
-      const dx = Math.abs(1 / rx), dy = Math.abs(1 / ry);
-      let stepX, stepY, sdx, sdy, side = 0, n = 0, best = 0;
-      if (rx < 0) { stepX = -1; sdx = (px - mx) * dx; } else { stepX = 1; sdx = (mx + 1 - px) * dx; }
-      if (ry < 0) { stepY = -1; sdy = (py - my) * dy; } else { stepY = 1; sdy = (my + 1 - py) * dy; }
-      for (let i = 0; i < 64; i++) {
-        if (sdx < sdy) { sdx += dx; mx += stepX; side = 0; } else { sdy += dy; my += stepY; side = 1; }
-        if (mx < 0 || my < 0 || mx >= mw || my >= mh) break;
-        const st = tw[my * mw + mx];
-        if (!st || st.length <= best) continue;
-        const perp = Math.max(0.02, side === 0 ? sdx - dx : sdy - dy);
-        let wx = side === 0 ? py + perp * ry : px + perp * rx; wx -= Math.floor(wx);
-        if ((side === 0 && rx < 0) || (side === 1 && ry > 0)) wx = 1 - wx;
-        HP[n] = perp; HW[n] = wx; HS[n] = st; HD[n] = side; n++;
-        best = st.length;
-        if (best >= maxH || n >= 4) break;
-      }
-      if (!n) { zbuf[x] = 1e9; continue; }
-      zbuf[x] = HP[0];
+      const camX = 2 * x / W - 1, n = cast(M, px, py, ca + plx * camX, sa + ply * camX);
       for (let j = n - 1; j >= 0; j--) {
         const perp = HP[j], st = HS[j], ns = st.length;
         const lh = H / perp, bot = half + lh / 2, top = bot - ns * lh;
@@ -582,7 +640,6 @@ const View3D = (() => {
         }
       }
     }
-    ctx.putImageData(img, 0, 0);
   }
   /* Draw the explored part of a map: the corner minimap, and (with o.big) the full-page map.
      o.marks: [{x, y, kind: 'loot' | 'chest'}], o.locCol: colours for building doors by map character.
@@ -632,5 +689,5 @@ const View3D = (() => {
     c.beginPath(); c.moveTo(cs * 0.75 * k, 0); c.lineTo(-cs * 0.55 * k, -cs * 0.55 * k); c.lineTo(-cs * 0.2 * k, 0); c.lineTo(-cs * 0.55 * k, cs * 0.55 * k); c.closePath(); c.fill(); c.stroke(); c.restore();
     return (canvas._geo = { ox, oy, cs, w: M.w, h: M.h });
   }
-  return { init, prepare, render, minimap, MAPCOL, get W() { return W; }, H };
+  return { init, prepare, render, minimap, MAPCOL, get W() { return W; }, H, get coarse() { return coarse; }, get cost() { return cost; } };
 })();

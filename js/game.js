@@ -6,7 +6,7 @@ let G = null;
 const SAVE = 'emberfall.save.';
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]], DIRN = ['North', 'East', 'South', 'West'];
 const P = () => G ? G.party.map(id => G.roster.find(c => c.id === id)).filter(Boolean) : [];
-const X = { def: null, cells: null, M: null, sprites: [], cam: { x: 0, y: 0, a: 0 }, busy: false, lock: false };
+const X = { def: null, cells: null, M: null, sprites: [], cam: { x: 0, y: 0, a: 0 }, busy: false, lock: false, next: null, held: false, chain: false };
 function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id)); }
 function timeText() { const t = G.time % 1440; return 'Day ' + (Math.floor(G.time / 1440) + 1) + ', ' + String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
 
@@ -27,7 +27,7 @@ function loadGame(slot) {
   G = data;
   while (modals.length) closeModal();
   showScreen('game'); $('#log').replaceChildren();
-  X.lock = false; X.busy = false;
+  X.lock = false; X.busy = false; X.next = null;
   enterMap();
   log('Game loaded: ' + MAPS[G.map].name + ', ' + timeText() + '.', 'good');
   return true;
@@ -180,28 +180,48 @@ function refreshAll() {
 
 /* ---------------- movement ---------------- */
 const busy = () => X.busy || X.lock || modals.length > 0 || Combat.active;
+/* A step or turn asked for while the last one is still playing is kept and played straight after it, so that
+   walking does not stall between squares. One that came from holding a key or button down (X.held) is dropped
+   again when that is let go, so the company does not walk on. */
+function later(fn) { if (X.busy) X.next = { fn, held: X.held }; }
+function dropHeld() { if (X.next && X.next.held) X.next = null; }
+/* Once the company stands still, redraw the view sharp if the last frame of the movement was a coarse one. */
+let sharpTimer = 0;
+function sharpen() {
+  clearTimeout(sharpTimer);
+  if (View3D.coarse) sharpTimer = setTimeout(() => { if (View3D.coarse && !X.busy && X.M && !isWild()) View3D.render(X.cam, X.M, X.sprites); }, 180);
+}
 function animate(to, d, done) {
-  const from = { x: X.cam.x, y: X.cam.y, a: X.cam.a }, t0 = performance.now();
+  const from = { x: X.cam.x, y: X.cam.y, a: X.cam.a }, t0 = performance.now(), even = X.chain; // a movement that follows straight on from another keeps an even pace
   X.busy = true;
-  let finished = false;
-  const end = () => { if (finished) return; finished = true; X.cam.x = to.x; X.cam.y = to.y; X.cam.a = to.a; X.busy = false; if (done) done(); };
+  clearTimeout(sharpTimer);
+  let finished = false, shown = false;
+  const end = () => {
+    if (finished) return;
+    finished = true; X.cam.x = to.x; X.cam.y = to.y; X.cam.a = to.a; X.busy = false;
+    if (!shown) View3D.render(X.cam, X.M, X.sprites, true);
+    if (done) done();
+    const next = X.next; X.next = null;
+    if (next && !busy()) { X.chain = true; try { next.fn(); } finally { X.chain = false; } }
+    if (!X.busy) sharpen();
+  };
   const f = now => {
     if (finished) return;
-    const k = Math.min(1, (now - t0) / d), e = k * (2 - k);
+    const k = Math.min(1, (now - t0) / d), e = even ? k : k * (2 - k);
     X.cam.x = from.x + (to.x - from.x) * e; X.cam.y = from.y + (to.y - from.y) * e; X.cam.a = from.a + (to.a - from.a) * e;
-    View3D.render(X.cam, X.M, X.sprites);
+    View3D.render(X.cam, X.M, X.sprites, true); shown = k >= 1;
     if (k < 1) requestAnimationFrame(f); else end();
   };
   requestAnimationFrame(f);
   setTimeout(end, d + 250); // safety net if the tab is not painting
 }
 function turn(d) {
-  if (busy()) return;
+  if (busy()) { later(() => turn(d)); return; }
   G.dir = (G.dir + d + 4) % 4;
-  animate({ x: X.cam.x, y: X.cam.y, a: X.cam.a + d * Math.PI / 2 }, 140, () => { setCam(); reveal(); draw(); refreshAll(); });
+  animate({ x: X.cam.x, y: X.cam.y, a: X.cam.a + d * Math.PI / 2 }, 140, () => { setCam(); reveal(); refreshAll(); });
 }
 function move(fwd, side) {
-  if (busy()) return;
+  if (busy()) { later(() => move(fwd, side)); return; }
   const [fx, fy] = DIRS[G.dir], [sx, sy] = DIRS[(G.dir + 1) % 4];
   const nx = G.x + fx * fwd + sx * side, ny = G.y + fy * fwd + sy * side, ch = cell(nx, ny);
   if (isBlock(ch)) { if (fwd > 0) bump(nx, ny, ch); return; }
@@ -502,6 +522,7 @@ document.addEventListener('keydown', e => {
     if (used) e.preventDefault();
     return;
   }
+  X.held = e.repeat;
   if (k === 'w' || k === 'arrowup') move(1, 0);
   else if (k === 's' || k === 'arrowdown') move(-1, 0);
   else if (k === 'a' || k === 'arrowleft') turn(-1);
@@ -516,8 +537,10 @@ document.addEventListener('keydown', e => {
   else if (k === 'b') { if (!busy()) bestiaryDialog(); }
   else if (k >= '1' && k <= '6') { const ch = P()[+k - 1]; if (ch && !busy()) showSheet(ch); }
   else used = false;
+  X.held = false;
   if (used) e.preventDefault();
 });
+document.addEventListener('keyup', dropHeld);
 /* the pictures follow the shape of the window */
 window.addEventListener('resize', () => {
   if (!G || !X.def || !$('#game').classList.contains('active') || Combat.active) return;

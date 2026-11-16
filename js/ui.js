@@ -99,6 +99,7 @@ function initParty() {
   toggleParty(on);
 }
 
+let partySig = '';
 const UI = {
   cmds(list, hint) {
     $('#cmdhint').textContent = hint || '';
@@ -117,6 +118,10 @@ const UI = {
   },
   refreshParty() {
     if (!G) return;
+    // called after every step: rebuilding the cards and their portraits is skipped while nothing they show has changed
+    const sig = JSON.stringify(P()) + (G.march >= 600);
+    if (sig === partySig && $('#party').childElementCount) return;
+    partySig = sig;
     $('#partyBtn').replaceChildren(icon('party'), h('span', { class: 'hpips' }, P().map(ch => {
       const k = ch.dead ? 0 : clamp(ch.hp / ch.maxhp, 0, 1);
       return h('i', { title: ch.name + ': ' + ch.hp + '/' + ch.maxhp }, h('b', { style: 'height:' + Math.max(k * 100, ch.dead ? 0 : 8) + '%;background:' + (k > 0.5 ? '#5fce6a' : k > 0.25 ? '#e3b23c' : '#e2493b') }));

@@ -27,12 +27,12 @@ const Nav = (() => {
   function button([glyph, title, fn, once]) {
     const b = h('button', { class: 'navbtn', title, 'aria-label': title, text: glyph });
     let timer = null;
-    const stop = () => { if (timer) { clearInterval(timer); timer = null; } b.classList.remove('down'); };
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; dropHeld(); } b.classList.remove('down'); };
     b.addEventListener('pointerdown', e => {
       e.preventDefault(); stop();
       if (!G || modals.length || Combat.active) return;
       b.classList.add('down'); fn();
-      if (!once) timer = setInterval(() => { if (modals.length || Combat.active) stop(); else fn(); }, 110); // holding repeats the step
+      if (!once) timer = setInterval(() => { if (modals.length || Combat.active) stop(); else { X.held = true; fn(); X.held = false; } }, 60); // holding repeats the step
     });
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, stop);
     b.addEventListener('contextmenu', e => e.preventDefault());
