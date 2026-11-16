@@ -46,7 +46,7 @@ function buildMap() {
   const mods = G.mods[G.map] || {};
   X.cells = X.def.grid.map((row, y) => row.split('').map((ch, x) => mods[x + ',' + y] || ch));
   X.M = View3D.prepare(X.def, X.cells);
-  if (!G.seen[G.map]) G.seen[G.map] = new Array(X.M.w * X.M.h).fill(0);
+  if (!G.seen[G.map]) { G.seen[G.map] = new Array(X.M.w * X.M.h).fill(0); if (!X.def.safe) jot('Entered ' + lowerThe(X.def.name) + '.', 'place'); }
   buildSprites();
 }
 function buildSprites() {
@@ -140,7 +140,7 @@ function reveal() {
 }
 function draw() {
   View3D.render(X.cam, X.M, X.sprites);
-  View3D.minimap($('#minimap'), X.M, G.seen[G.map], G.x, G.y, G.dir, lootSpots());
+  View3D.minimap($('#minimap'), X.M, G.seen[G.map], G.x, G.y, G.dir, mapOpts());
 }
 function facingText() {
   const [dx, dy] = DIRS[G.dir], ch = cell(G.x + dx, G.y + dy);
@@ -158,6 +158,7 @@ function facingText() {
 }
 function refreshAll() {
   if (!G || !X.def) return;
+  Nav.refresh();
   UI.refreshParty();
   $('#hudLoc').textContent = X.def.name;
   if (isWild()) {
@@ -174,7 +175,7 @@ function refreshAll() {
   $('#hudTime').textContent = timeText();
   $('#hudGold').textContent = G.gold + ' gp';
   $('#hudFace').textContent = facingText();
-  View3D.minimap($('#minimap'), X.M, G.seen[G.map], G.x, G.y, G.dir, lootSpots());
+  View3D.minimap($('#minimap'), X.M, G.seen[G.map], G.x, G.y, G.dir, mapOpts());
 }
 
 /* ---------------- movement ---------------- */
@@ -264,7 +265,7 @@ async function arrive(px, py) {
 async function fight(spec, px, py) {
   X.lock = true;
   const mons = spec.mons.map(([id, n]) => [id, typeof n === 'number' ? n : Math.max(1, rollDice(n))]);
-  if (spec.text) await msgBox('Encounter!', spec.text + '\n' + mons.map(([id, n]) => n + ' × ' + MONSTERS[id].name).join(', '), 'To arms!');
+  if (spec.text) await msgBox('Encounter!', encounterBody(spec.text, mons), 'To arms!');
   const ex = exploreCanvas();
   ex.style.display = 'none';
   const res = await Combat.start({ mons, arena: spec.arena || X.def.arena || 'street', party: P(), surprise: spec.surprise, night: spec.night });
@@ -301,7 +302,7 @@ async function runEvent(ch, ev, px, py) {
     G.flags[key] = 1;
     const carrier = (ev.items || []).length ? P().find(c => c.hp > 0 && !c.dead) : null;
     if (carrier) ev.items.forEach(id => carrier.inv.push(id));
-    if (ev.quest) G.flags['q:' + ev.quest] = 1;
+    if (ev.quest) questDeed(ev.quest);
     await msgBox(X.def.name, ev.text + (carrier ? '\n(' + ev.items.map(i => item(i).name).join(', ') + ' carried by ' + carrier.name + '.)' : ''));
     if (ev.quest) saveGame('auto');
   }
@@ -309,13 +310,19 @@ async function runEvent(ch, ev, px, py) {
     const r = await fight(ev, px, py);
     if (r === 'win') {
       G.flags[key] = 1;
-      if (ev.quest) { G.flags['q:' + ev.quest] = 1; log('A deed worth reporting at the Town Hall.', 'good'); }
+      if (ev.quest) { questDeed(ev.quest); log('A deed worth reporting at ' + theName(locName('hall')) + '.', 'good'); }
       saveGame('auto');
     }
   } else if (ev.type === 'chest') {
     X.lock = true;
     try { await openChest(key, ev); } finally { X.lock = false; }
   }
+}
+/* a commission's task is accomplished in the field; it is paid when reported at the hall */
+function questDeed(id) {
+  G.flags['q:' + id] = 1;
+  const q = QUESTS[id];
+  if (q) jot('Done: ' + q.name + '. ' + (G.quests[id] ? 'Report to ' + mod().names.giver + ' at ' + theName(locName('hall')) + '.' : 'Someone at ' + theName(locName('hall')) + ' might want to hear of it.'), 'deed');
 }
 async function openChest(key, ev) {
   if (await choice('Treasure', ev.text, [{ label: 'Open it', cls: 'primary' }, { label: 'Leave it' }])) return;
@@ -338,7 +345,7 @@ async function openChest(key, ev) {
     }
   }
   G.flags[key] = 1;
-  if (ev.quest) G.flags['q:' + ev.quest] = 1;
+  if (ev.quest) questDeed(ev.quest);
   const live = P().filter(c => !c.dead), carrier = P().find(c => c.hp > 0 && !c.dead) || live[0], share = Math.floor(ev.gold / Math.max(1, live.length));
   G.gold += ev.gold; live.forEach(c => awardXP(c, share));
   (ev.items || []).forEach(id => carrier.inv.push(id));
@@ -409,7 +416,7 @@ async function camp() {
 function exploreCmds() {
   UI.cmds([
     { label: '↶ Turn', key: 'A', on: () => turn(-1) }, { label: 'Forward', key: 'W', on: () => move(1, 0) }, { label: 'Turn ↷', key: 'D', on: () => turn(1) },
-    { label: 'Back', key: 'S', on: () => move(-1, 0) }, { label: 'Search', key: 'F', on: search }, { label: 'Camp', key: 'R', on: camp }, { label: 'Menu', key: 'Esc', on: menuDialog },
+    { label: 'Back', key: 'S', on: () => move(-1, 0) }, { label: 'Search', key: 'F', on: search }, { label: 'Camp', key: 'R', on: camp }, { label: 'Map', key: 'M', on: () => { if (!busy()) mapDialog(); } }, { label: 'Journal', key: 'J', on: () => { if (!busy()) journalDialog(); } }, { label: 'Menu', key: 'Esc', on: menuDialog },
   ], 'Click a party member for equipment and spells.');
 }
 function gameOver() {
@@ -453,6 +460,7 @@ function beginAdventure() {
   enterMap();
   log('— ' + M.code + ': ' + M.name + ' —', 'round');
   log(M.hint, 'dim');
+  jot('Arrived in ' + M.names.town + ' to begin ' + M.code + ': ' + M.name + '. ' + M.hint, 'place');
   saveGame('auto');
   msgBox(M.names.town, M.intro + '\nYour company has ' + G.gold + ' gold pieces.');
 }
@@ -478,6 +486,9 @@ document.addEventListener('keydown', e => {
     else if (k === 'enter' || k === ' ') { const b = UI.cmdKey('enter'); if (b && !busy()) b.click(); }
     else if (k === 'r') camp();
     else if (k === 'escape') { if (!busy()) menuDialog(); }
+    else if (k === 'j') { if (!busy()) journalDialog(); }
+    else if (k === 'm') { if (!busy()) mapDialog(); }
+    else if (k === 'b') { if (!busy()) bestiaryDialog(); }
     else if (k >= '1' && k <= '6') { const ch = P()[+k - 1]; if (ch && !busy()) showSheet(ch); }
     else used = false;
     if (used) e.preventDefault();
@@ -492,6 +503,9 @@ document.addEventListener('keydown', e => {
   else if (k === 'f') search();
   else if (k === 'r') camp();
   else if (k === 'escape') { if (!busy()) menuDialog(); }
+  else if (k === 'j') { if (!busy()) journalDialog(); }
+  else if (k === 'm') { if (!busy()) mapDialog(); }
+  else if (k === 'b') { if (!busy()) bestiaryDialog(); }
   else if (k >= '1' && k <= '6') { const ch = P()[+k - 1]; if (ch && !busy()) showSheet(ch); }
   else used = false;
   if (used) e.preventDefault();
@@ -499,5 +513,7 @@ document.addEventListener('keydown', e => {
 window.addEventListener('DOMContentLoaded', () => {
   View3D.init($('#view3d'));
   Over.init($('#overCanvas')); Over.onStep(wildMove);
+  initMinimap();
+  Nav.init($('#navlayer'));
   showTitle();
 });

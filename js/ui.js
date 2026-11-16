@@ -424,6 +424,7 @@ function hallDialog() {
     const q = QUESTS[ready], holder = q.needItem ? P().find(c => c.inv.includes(q.needItem)) : null;
     if (holder) holder.inv.splice(holder.inv.indexOf(q.needItem), 1);
     G.quests[ready] = 'done'; G.gold += q.gold;
+    jot('Commission complete: ' + q.name + '. ' + giver + ' paid ' + q.gold + ' gold.', 'quest');
     live().forEach(c => awardXP(c, q.xp));
     log('Commission complete: ' + q.name + '. +' + q.gold + ' gp, +' + q.xp + ' XP each.', 'good');
     saveGame('auto'); refreshAll();
@@ -440,7 +441,8 @@ function hallDialog() {
     const q = QUESTS[offer];
     G.quests[offer] = 'active';
     if (q.reveal) revealSite(q.reveal);
-    msgBox('Commission: ' + q.name, (q.lead || giver + ' has work for you.') + '\n"' + q.offer + '"\nReward: ' + q.gold + ' gold, and the town\'s gratitude.' + (q.reveal ? '\n(The location has been marked on your map of the Emberwild.)' : '')).then(hallDialog);
+    jot('New commission from ' + giver + ': ' + q.name + '.' + (q.goal ? ' ' + q.goal : ''), 'quest');
+    msgBox('Commission: ' + q.name, (q.lead || giver + ' has work for you.') + '\n"' + q.offer + '"\nReward: ' + q.gold + ' gold, and the town\'s gratitude.' + (q.reveal ? '\n(The location has been marked on your map of the Emberwild.)' : '') + '\n(Written in your journal. Press J to read it.)').then(hallDialog);
     return;
   }
   // 3. status
@@ -482,7 +484,7 @@ function tavernDialog() {
   const R = mod().rumors;
   function render() {
     body.replaceChildren(h('div', { class: 'msg', text: msg }),
-      h('button', { class: 'btn', text: 'Buy a round and listen (2 gp)', disabled: G.gold < 2, onclick: () => { G.gold -= 2; G.rumor = ((G.rumor == null ? Math.floor(Math.random() * R.length) : G.rumor) + 1) % R.length; msg = R[G.rumor]; render(); } }),
+      h('button', { class: 'btn', text: 'Buy a round and listen (2 gp)', disabled: G.gold < 2, onclick: () => { G.gold -= 2; G.rumor = ((G.rumor == null ? Math.floor(Math.random() * R.length) : G.rumor) + 1) % R.length; msg = R[G.rumor]; jot('Heard at ' + theName(locName('tavern')) + ': ' + R[G.rumor], 'rumor'); render(); } }),
       h('div', { class: 'dimtxt', text: 'Party gold: ' + G.gold + ' gp' }));
   }
   render();
@@ -509,13 +511,17 @@ function helpDialog() {
   const sec = (t, lines) => [h('h3', { text: t }), h('ul', null, lines.map(l => h('li', { text: l })))];
   modal({ title: 'How to Play', wide: true, body: h('div', { class: 'help' },
     sec('Campaigns and Adventures', ['New Game opens the adventure chooser. Each module has its own home base, dungeons and commissions, and varies in starting level, difficulty (Easy to Deadly) and size (Short to Large).', 'Adventures above 1st level start the ready-made heroes at that level with suitable gear. Characters you create are trained up to it too, with extra gold.', 'You can also bring your company from any saved game. Anyone below the module\'s starting level is trained up to it.', 'Finish an adventure\'s last commission to complete it; you will be offered the next in the saga. Choose Campaign from the menu to travel between adventures at any time. Unfinished progress is kept.']),
-    sec('Exploring', ['W / ↑ move forward, S / ↓ step back, A / ← and D / → turn, Q / E sidestep.', 'Walk into a door to open it, and into a building\'s door to enter.', 'F searches for secret doors. R makes camp (dungeons only; you may be disturbed).', 'Click a party member or press 1–6 for their character sheet: equipment, spells and items.', 'Esc opens the menu (save, load, help).']),
+    sec('Exploring', ['W / ↑ move forward, S / ↓ step back, A / ← and D / → turn, Q / E sidestep.', 'Walk into a door to open it, and into a building\'s door to enter.', 'F searches for secret doors. R makes camp (dungeons only; you may be disturbed).', 'Click a party member or press 1–6 for their character sheet: equipment, spells and items.', 'M opens the full map of the area, with buildings, stairs, chests you have seen and dropped gear marked. Rest the mouse on the corner map to name a square.', 'B opens the bestiary: a sketch of every kind of creature you have met, and, once you have fought it, its strengths and weaknesses.', 'J opens the journal: your commissions, what each one asks of you, and dated notes of what you have seen and heard.', 'Anything dropped from a character sheet stays on the ground where you stand. Walk back over it, or use the sheet, to pick it up.', 'On a tablet or phone, tap the ✥ button at the top left of the view (or Touch Controls in the menu) for on-screen movement buttons: right side, left side, both, or off. Hold a button to keep moving.', 'Esc opens the menu (save, load, help).']),
     sec('Overland Travel', ['Leave Emberfall by the south gate to enter the Emberwild. W/A/S/D move north/west/south/east, Q/E/Z/C move diagonally, or click the map.', 'Each square is a mile. A party moves at its slowest member\'s rate (12 covers about 24 miles in a ten-hour day); roads halve travel time, forest and hills double it, fen triples it.', 'After ten hours on the march the party is weary and slower until it camps (R). Night travel is more dangerous and you see less.', 'Encounters depend on terrain and time of day. Spot them first and you may ambush or slip away; otherwise you may fight, try to evade (faster parties escape more easily) or parley with intelligent foes.', 'Step onto a place to visit it, or press Enter while standing on it.']),
     sec('Combat', ['Initiative is rolled each round: d10 plus weapon speed. Low goes first.', 'Click a highlighted square to move; click an adjacent enemy to attack; click a distant enemy to fire a missile weapon.', 'Moving away from an adjacent enemy gives it a free attack.', 'Spellcasters who are hit earlier in the round lose their concentration and cannot cast.', 'A character at 0 hp or below is dying and loses 1 hp each round until bandaged; at -10 they are dead.', 'Thieves backstab (+4 to hit, multiplied damage) when hidden or when an ally is on the opposite side of the target.', 'Space ends the turn. Stand on the edge of the field to flee.']),
     sec('The Rules', ['Second Edition AD&D: THAC0 and descending Armor Class, five saving throw categories, class experience tables, racial abilities and class restrictions.', 'Spells must be memorized and are regained only by resting. Choose them on the character sheet.', 'Levels are gained at the Training Hall once you have the experience (and the fee).', 'Experience comes from slain monsters, recovered treasure (1 XP per gold piece) and the Reeve\'s commissions.'])) });
 }
 function menuDialog() {
   modal({ title: mod().code + ': ' + mod().name, body: h('div', { class: 'dimtxt', text: 'Day ' + (Math.floor(G.time / 1440) + 1) + ' · ' + G.gold + ' gold · ' + MAPS[G.map].name }), buttons: [
+    { label: 'Map', on: () => mapDialog(), disabled: Combat.active },
+    { label: 'Journal', on: () => journalDialog() },
+    { label: 'Bestiary', on: () => bestiaryDialog() },
+    { label: 'Touch Controls: ' + Nav.label, title: 'On-screen movement buttons for tablets and phones. Click to change where they appear.', on: () => { Nav.cycle(); menuDialog(); } },
     { label: 'Save Game', on: () => saveDialog(true), disabled: Combat.active },
     { label: 'Load Game', on: () => saveDialog(false), disabled: Combat.active },
     { label: 'Campaign', on: campaignDialog, disabled: Combat.active || !MAPS[G.map].safe, title: MAPS[G.map].safe ? '' : 'Return to a town to set out for another adventure' },

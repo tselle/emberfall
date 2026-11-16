@@ -61,7 +61,8 @@ const WILD_ENC = {
 };
 
 const Over = (() => {
-  const TS = 44, CW = 1040, CH = 650, Z = 1.5, VW = CW / Z, VH = CH / Z; // world painted at 1.5x for crisp zoom
+  const TS = 44, CW = 1040, CH = 650, Z = 1.5, VW = CW / Z, VH = CH / Z; // Z: zoom of the view
+  const WZ = 2, SS = 2; // WZ: pixels per map unit the world is painted at. SS: canvas pixels per layout unit.
   let cv, c, def = null, W = 0, H = 0, world = null, mini = null, fog = null, vign = null, step = null;
   const cam = { x: 0, y: 0 }, vis = new Set();
   let face = 1, hover = null, anim = null;
@@ -72,7 +73,7 @@ const Over = (() => {
   const isRoad = ch => ch === '=' || ch === '+' || (def.sites[ch] && def.sites[ch].road);
 
   function init(canvas) {
-    cv = canvas; cv.width = CW; cv.height = CH; c = cv.getContext('2d');
+    cv = canvas; cv.width = CW * SS; cv.height = CH * SS; c = cv.getContext('2d');
     cv.addEventListener('click', e => { const t = tileAt(e); if (t && step) step(Math.sign(t.x - G.x), Math.sign(t.y - G.y)); });
     cv.addEventListener('mousemove', e => { const t = tileAt(e); if (!t || !hover || t.x !== hover.x || t.y !== hover.y) { hover = t; if (!anim) draw(); } });
     cv.addEventListener('mouseleave', () => { hover = null; if (!anim) draw(); });
@@ -95,9 +96,9 @@ const Over = (() => {
   function prepare(d) {
     if (def === d && world) return;
     def = d; H = d.grid.length; W = d.grid[0].length;
-    world = document.createElement('canvas'); world.width = Math.ceil(W * TS * Z); world.height = Math.ceil(H * TS * Z);
+    world = document.createElement('canvas'); world.width = Math.ceil(W * TS * WZ); world.height = Math.ceil(H * TS * WZ);
     const g = world.getContext('2d');
-    g.scale(Z, Z);
+    g.scale(WZ, WZ);
     // 1. soft biome colours: a one-pixel-per-tile image, upscaled with smoothing
     const lo = document.createElement('canvas'); lo.width = W; lo.height = H;
     const l = lo.getContext('2d');
@@ -330,8 +331,9 @@ const Over = (() => {
   function draw() {
     if (!def || !c) return;
     const [vx, vy] = view();
-    c.imageSmoothingEnabled = true;
-    c.drawImage(world, vx * Z, vy * Z, CW, CH, 0, 0, CW, CH);
+    c.setTransform(SS, 0, 0, SS, 0, 0);
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    c.drawImage(world, vx * WZ, vy * WZ, VW * WZ, VH * WZ, 0, 0, CW, CH);
     c.save(); c.scale(Z, Z);
     // labels of discovered sites
     const seen = G.seen[G.map];
@@ -372,7 +374,7 @@ const Over = (() => {
     const hv = hover && seen[hover.y * W + hover.x];
     if (hv) { c.strokeStyle = 'rgba(255,255,255,.45)'; c.lineWidth = 1; c.strokeRect(hover.x * TS - vx + 1, hover.y * TS - vy + 1, TS - 2, TS - 2); }
     c.restore();
-    c.drawImage(vign, 0, 0);
+    c.drawImage(vign, 0, 0, CW, CH);
     // hovered square
     if (hv) {
       const t = terr(hover.x, hover.y), s = def.sites[at(hover.x, hover.y)];
@@ -403,18 +405,45 @@ const Over = (() => {
       setTimeout(end, ms + 250);
     });
   }
-  function minimap(canvas) {
-    const g = canvas.getContext('2d'), cw = canvas.width, ch = canvas.height, k = Math.min(cw / W, ch / H), ox = (cw - W * k) / 2, oy = (ch - H * k) / 2;
+  /* The whole country on one canvas: the painted world scaled to fit, hidden where unexplored, with
+     places, dropped gear and the party marked. Small for the corner minimap, large (with names) for the map page. */
+  function mapTo(canvas, big) {
+    const g = canvas.getContext('2d'), cw = canvas.width, ch = canvas.height, pad = big ? 24 : 0;
+    const k = Math.min((cw - pad * 2) / W, (ch - pad * 2) / H), ox = (cw - W * k) / 2, oy = (ch - H * k) / 2, seen = G.seen[G.map];
+    g.setTransform(1, 0, 0, 1, 0, 0);
     g.fillStyle = '#0b0c11'; g.fillRect(0, 0, cw, ch);
-    g.imageSmoothingEnabled = false;
-    g.drawImage(mini, ox, oy, W * k, H * k);
-    const seen = G.seen[G.map]; g.fillStyle = '#0b0c11';
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!seen[y * W + x]) g.fillRect(Math.floor(ox + x * k), Math.floor(oy + y * k), Math.ceil(k), Math.ceil(k));
-    g.fillStyle = '#ffe38a';
-    for (const p of lootSpots()) if (seen[p.y * W + p.x]) g.fillRect(Math.floor(ox + p.x * k), Math.floor(oy + p.y * k), Math.max(2, Math.ceil(k)), Math.max(2, Math.ceil(k)));
-    g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 1.5;
-    g.beginPath(); g.arc(ox + (G.x + 0.5) * k, oy + (G.y + 0.5) * k, Math.max(2.5, k * 0.6), 0, 6.3); g.fill(); g.stroke();
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(world, ox, oy, W * k, H * k);
+    g.drawImage(fog, ox, oy, W * k, H * k);
+    g.strokeStyle = '#343849'; g.lineWidth = big ? 2 : 1; g.strokeRect(ox + 0.5, oy + 0.5, W * k - 1, H * k - 1);
+    const mid = (x, y) => [ox + (x + 0.5) * k, oy + (y + 0.5) * k];
+    // places
+    const names = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const st = def.sites[at(x, y)]; if (!st || !seen[y * W + x]) continue;
+      const [mx, my] = mid(x, y), r = big ? 7 : 3.2;
+      g.fillStyle = '#1a1206'; g.beginPath(); g.moveTo(mx, my - r - 2); g.lineTo(mx + r + 2, my); g.lineTo(mx, my + r + 2); g.lineTo(mx - r - 2, my); g.closePath(); g.fill();
+      g.fillStyle = '#ffd27a'; g.beginPath(); g.moveTo(mx, my - r); g.lineTo(mx + r, my); g.lineTo(mx, my + r); g.lineTo(mx - r, my); g.closePath(); g.fill();
+      if (big) names.push([st.name, mx, my + k * 0.5 + 24]);
+    }
+    if (big) {
+      g.font = '600 22px Georgia, serif'; g.textAlign = 'center'; g.lineJoin = 'round';
+      for (const [t, x, y] of names) { g.lineWidth = 5; g.strokeStyle = 'rgba(10,8,6,.9)'; g.strokeText(t, x, y); g.fillStyle = '#f3e3b5'; g.fillText(t, x, y); }
+    }
+    for (const p of lootSpots()) {
+      if (!seen[p.y * W + p.x]) continue;
+      const [mx, my] = mid(p.x, p.y), r = big ? 6.5 : 3;
+      g.fillStyle = '#3a1030'; g.beginPath(); g.arc(mx, my, r + 1.5, 0, 6.3); g.fill();
+      g.fillStyle = View3D.MAPCOL.loot; g.beginPath(); g.arc(mx, my, r, 0, 6.3); g.fill();
+    }
+    const [px, py] = mid(G.x, G.y), pr = big ? 9 : Math.max(3, k * 0.7);
+    if (big) { g.strokeStyle = 'rgba(255,210,74,.5)'; g.lineWidth = 3; g.beginPath(); g.arc(px, py, pr + 9, 0, 6.3); g.stroke(); }
+    g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = big ? 3 : 1.5;
+    g.beginPath(); g.arc(px, py, pr, 0, 6.3); g.fill(); g.stroke();
+    return (canvas._geo = { ox, oy, cs: k, w: W, h: H });
   }
+  const minimap = canvas => mapTo(canvas, false);
+  const fullMap = canvas => mapTo(canvas, true);
   /* the party sets out knowing the roads and the country around Emberfall */
   function knownLand() {
     const seen = G.seen[G.map], e = find('E');
@@ -427,7 +456,7 @@ const Over = (() => {
     const p = find(k), seen = G.seen.wild; if (!p || !seen) return;
     for (let y = p.y - r; y <= p.y + r; y++) for (let x = p.x - r; x <= p.x + r; x++) if (x >= 0 && y >= 0 && x < W && y < H) seen[y * W + x] = 1;
   }
-  return { init, prepare, draw, reveal, place, travel, minimap, at, terr, find, night, revealAround, knownLand, onStep(fn) { step = fn; }, get size() { return [W, H]; } };
+  return { init, prepare, draw, reveal, place, travel, minimap, fullMap, at, terr, find, night, revealAround, knownLand, onStep(fn) { step = fn; }, get size() { return [W, H]; } };
 })();
 
 /* ============================================================
@@ -454,7 +483,7 @@ function wildCmds() {
     { label: '↙', key: 'Z', on: go(-1, 1) }, { label: '↘', key: 'C', on: go(1, 1) },
     { label: 'Visit', key: 'Enter', on: () => { const k = Over.at(G.x, G.y); if (X.def.sites[k]) visitSite(k); else if (groundAt().length) lootHere(); else log('There is nothing here but ' + Over.terr(G.x, G.y).name.toLowerCase() + '.', 'dim'); } },
     { label: 'Camp', key: 'R', on: wildCamp }, { label: 'Menu', key: 'Esc', on: menuDialog },
-  ], 'Click the map to walk toward a point. Travel time depends on terrain and your slowest member\'s movement rate.');
+  ], 'Click the map to walk toward a point. M opens the full map, J the journal, B the bestiary. Travel time depends on terrain and your slowest member\'s movement rate.');
 }
 function revealSite(k) { if (!G.seen.wild) { const g = MAPS.wild.grid; G.seen.wild = new Array(g.length * g[0].length).fill(0); } Over.prepare(MAPS.wild); Over.revealAround(k, 1); }
 
@@ -508,8 +537,8 @@ async function wildEncounter(t, px, py, forced) {
     opts.push({ label: ms ? 'Slip away unseen' : 'Evade (' + evade + '%)', id: 'evade' });
     const lead = up.slice().sort((a, b) => b.cha - a.cha)[0];
     if (e.parley && !ms) opts.push({ label: 'Parley (' + lead.name.split(' ')[0] + ')', id: 'parley' });
-    const head = (ms ? 'You spot them first, ' + dist + ' yards off. They have not noticed you.' : 'At ' + dist + ' yards:') + '\n' + desc;
-    const o = opts[await choice('Encounter!', e.text + '\n' + head, opts)];
+    const head = ms ? 'You spot them first, ' + dist + ' yards off. They have not noticed you.' : 'They are ' + dist + ' yards off.';
+    const o = opts[await choice('Encounter!', encounterBody(e.text + '\n' + head, mons), opts)];
     if (o.id === 'evade') {
       if (rnd(100) <= evade) { log(ms ? 'You let them pass and go on your way.' : 'You lose them in the ' + (t.table === 'road' ? 'hedgerows' : t.name.toLowerCase()) + '.', 'dim'); G.time += 30; refreshAll(); return; }
       log('They are faster than you. There is no escape!', 'bad');

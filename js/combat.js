@@ -6,7 +6,7 @@
    attacks of opportunity, spells, turning undead, backstab.
    ============================================================ */
 const Combat = (() => {
-  const CW = 1040, CH = 650, HW = 36, HH = 18, US = 1.22; // US: unit draw scale
+  const CW = 1040, CH = 650, HW = 36, HH = 18, US = 1.22, SS = 2; // US: unit draw scale. SS: pixels drawn per layout unit, for a sharp picture on large screens
   let S = null, cv, c, raf = 0;
   const THEMES = {
     dungeon: { a: '#5f574b', edge: '#2b2620', block: '#7a6f5d', bg0: '#1b1814', bg1: '#070605' },
@@ -86,8 +86,9 @@ const Combat = (() => {
     g.beginPath(); g.moveTo(sx, sy - HH + i / 2); g.lineTo(sx + HW - i, sy); g.lineTo(sx, sy + HH - i / 2); g.lineTo(sx - HW + i, sy); g.closePath();
   }
   function buildFloor() {
-    const f = document.createElement('canvas'); f.width = CW; f.height = CH;
+    const f = document.createElement('canvas'); f.width = CW * SS; f.height = CH * SS;
     const g = f.getContext('2d'), th = S.theme;
+    g.scale(SS, SS);
     const bg = g.createRadialGradient(CW / 2, CH / 2, 60, CW / 2, CH / 2, CW * 0.62);
     bg.addColorStop(0, th.bg0); bg.addColorStop(1, th.bg1);
     g.fillStyle = bg; g.fillRect(0, 0, CW, CH);
@@ -196,7 +197,8 @@ const Combat = (() => {
   }
 
   function draw(now) {
-    c.drawImage(S.floor, 0, 0);
+    c.setTransform(SS, 0, 0, SS, 0, 0);
+    c.drawImage(S.floor, 0, 0, CW, CH);
     const u = S.cur, m = S.mode;
     // highlights
     if (u && u.pc && S.endTurn && !S.busy) {
@@ -419,7 +421,7 @@ const Combat = (() => {
         if (t.hp <= -10) { t.ch.dead = true; log(t.name + ' is slain!', 'bad'); } else log(t.name + ' falls, gravely wounded!', 'bad');
         t.eff = {}; t.images = 0; t.hidden = false; t.stable = false;
       } else {
-        t.gone = true; t.dead = true; S.xp += t.m.xp;
+        t.gone = true; t.dead = true; S.xp += t.m.xp; bestiarySlay(t.m.id);
         S.corpses.push({ x: t.x, y: t.y, fig: t.fig, t0: performance.now(), flip: t.face < 0 });
         log(t.name + ' is slain.', 'good'); morale(t);
       }
@@ -613,7 +615,7 @@ const Combat = (() => {
       if (count <= 0) break;
       const e = TURN[v.m.undead][Math.min(L, 9) - 1];
       if (e == null || v.fleeing) continue;
-      if (e === 'D') { count--; any = true; log(v.name + ' crumbles to dust!', 'good'); v.hp = 0; v.gone = true; v.dead = true; S.xp += v.m.xp; S.corpses.push({ x: v.x, y: v.y, fig: v.fig, t0: performance.now() }); }
+      if (e === 'D') { count--; any = true; log(v.name + ' crumbles to dust!', 'good'); v.hp = 0; v.gone = true; v.dead = true; S.xp += v.m.xp; bestiarySlay(v.m.id); S.corpses.push({ x: v.x, y: v.y, fig: v.fig, t0: performance.now() }); }
       else if (e === 'T' || roll >= e) { count--; any = true; v.fleeing = true; float(v, 'turned', '#fff3b0'); log(v.name + ' recoils and flees.', 'good'); }
     }
     if (!any) log('The dead are unmoved.', 'bad');
@@ -940,13 +942,14 @@ const Combat = (() => {
     return new Promise(resolve => {
       cv = document.getElementById('combatCanvas');
       if (!c) {
-        cv.width = CW; cv.height = CH; c = cv.getContext('2d');
+        cv.width = CW * SS; cv.height = CH * SS; c = cv.getContext('2d');
         cv.addEventListener('click', click);
         cv.addEventListener('mousemove', e => { if (S) S.hover = cellFromEvent(e); });
         cv.addEventListener('mouseleave', () => { if (S) S.hover = null; });
         cv.addEventListener('contextmenu', e => { e.preventDefault(); if (S && S.mode && S.mode.t !== 'move' && S.endTurn && !S.busy) cancelMode(); });
       }
       setup(spec); S.resolve = resolve;
+      bestiaryFight(spec.mons);
       cv.style.display = 'block';
       raf = requestAnimationFrame(frame);
       run();

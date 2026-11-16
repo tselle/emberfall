@@ -445,6 +445,23 @@ QUESTS.rav_keep.lead = 'The Commander moves a carved raven onto the drowned keep
 QUESTS.rav_witch.lead = 'Ysolde looks at each of you in turn.';
 QUESTS.rav_patrol.lead = 'The Commander\'s jaw tightens.';
 
+// the one-line objective written in the quest journal
+Object.entries({
+  redfang: 'Kill the Redfang chieftain in the abbey undercroft.',
+  reliquary: 'Recover the Dawn Reliquary from the shrine in the Hollow Vaults and carry it back.',
+  malvek: 'Destroy Malvek the Ashen in his sanctum at the heart of the Vaults.',
+  gnolls: 'Kill the Bloodmane packlord at the old watchtower east of the river.',
+  thorn_kobolds: 'Kill Skarrik, the kobold chief, in the old brewery cellars.',
+  thorn_ring: 'Find Widow Marrow\'s ring somewhere in the kobold cellars and bring it back.',
+  cold_mine: 'Kill Gorrak Skullsplitter, the bugbear warlord, in the Deepcut Mine.',
+  cold_king: 'Lay the Iron King to rest in the barrow beneath the mine. Bring silver weapons.',
+  cold_tally: 'Find the foreman\'s tally book in his office in the mine and bring it back.',
+  rav_moor: 'Kill Gnashrot, chief of the moor trolls, at the causeway to the drowned keep. Bring fire.',
+  rav_keep: 'Take the drowned keep and kill the giant on its walls.',
+  rav_witch: 'Descend the pit beneath the keep and kill Vharra, the Witch-Queen.',
+  rav_patrol: 'Learn what became of the lost patrol on the moor and bring back their badges.',
+}).forEach(([id, g]) => { QUESTS[id].goal = g; });
+
 /* ---------------- rumours ---------------- */
 const THORN_RUMORS = [
   '"Kobolds hate fire beetles as much as we do," says the miller. "They keep them penned in the old malt store, I reckon, to guard the back way."',

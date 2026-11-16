@@ -142,6 +142,7 @@ function moduleComplete() {
   const M = mod();
   if (!G.done.includes(G.module)) G.done.push(G.module);
   G.won = true;
+  jot('Adventure complete: ' + M.code + ': ' + M.name + '.', 'quest');
   saveGame('auto');
   const N = M.next && MODULES[M.next];
   msgBox('Victory! ' + M.code + ': ' + M.name, M.victory + (N ? '' : '\n' + CAMPAIGN.name + ' is complete.'), 'Huzzah!').then(async () => {
@@ -163,6 +164,7 @@ function travelTo(mid) {
   enterMap();
   log('— ' + M.code + ': ' + M.name + ' —', 'round');
   log(M.hint, 'dim');
+  jot('After a fortnight on the road, arrived in ' + M.names.town + ' to begin ' + M.code + ': ' + M.name + '. ' + M.hint, 'place');
   saveGame('auto');
   msgBox(M.names.town, M.intro + (raised.length ? '\nOn the road, ' + raised.join(', ') + (raised.length === 1 ? ' trains' : ' train') + ' hard and ' + (raised.length === 1 ? 'reaches' : 'reach') + ' level ' + M.lvl + '.' : ''));
 }
