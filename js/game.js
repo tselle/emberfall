@@ -58,6 +58,54 @@ function buildSprites() {
     else if (ch === '>') X.sprites.push({ x, y, tex: 'stairsDown' });
     else if (ch >= 'a' && ch <= 'z') { const ev = X.def.ev[ch]; if (ev && ev.type === 'chest' && !G.flags[G.map + ':' + ch]) X.sprites.push({ x, y, tex: 'chest' }); }
   }));
+  for (const p of lootSpots()) X.sprites.push({ x: p.x, y: p.y, tex: 'loot' });
+}
+
+/* ---------------- items on the ground ----------------
+   Anything dropped stays on the square where the party stood, per map, and is saved with the game. */
+function groundAt(x = G.x, y = G.y, map = G.map) { const g = G.ground && G.ground[map]; return (g && g[x + ',' + y]) || []; }
+function lootSpots(map = G.map) {
+  const g = (G.ground && G.ground[map]) || {};
+  return Object.keys(g).filter(k => g[k].length).map(k => { const [x, y] = k.split(',').map(Number); return { x, y }; });
+}
+function setGround(list, x = G.x, y = G.y, map = G.map) {
+  G.ground = G.ground || {};
+  const g = G.ground[map] = G.ground[map] || {}, k = x + ',' + y;
+  if (list.length) g[k] = list; else { delete g[k]; if (!Object.keys(g).length) delete G.ground[map]; }
+  if (X.def && G.map === map && !isWild()) { buildSprites(); if (!Combat.active) draw(); }
+  if (X.def && G.map === map && isWild() && !Combat.active) Over.draw();
+}
+function dropItem(ch, idx) {
+  const id = ch.inv[idx];
+  if (id == null || item(id).t === 'q') return null;
+  ch.inv.splice(idx, 1);
+  setGround(groundAt().concat(id));
+  log(ch.name + ' drops ' + item(id).name + '.', 'dim');
+  refreshAll();
+  return id;
+}
+function takeFromGround(ch, i) {
+  const list = groundAt().slice(), id = list.splice(i, 1)[0];
+  if (id == null) return null;
+  ch.inv.push(id); setGround(list);
+  refreshAll();
+  return id;
+}
+async function lootHere() {
+  const list = groundAt();
+  if (!list.length) return;
+  const taker = P().find(c => c.hp > 0 && !c.dead);
+  if (!taker) return;
+  X.lock = true;
+  try {
+    const names = list.map(id => item(id).name).join(', ');
+    const i = await choice('On the Ground', 'Lying here: ' + names + '.',
+      [{ label: 'Take everything', cls: 'primary' }, { label: 'Leave it' }]);
+    if (i !== 0) return;
+    list.forEach(id => taker.inv.push(id)); setGround([]);
+    log(taker.name + ' picks up ' + names + '.', 'good');
+    refreshAll();
+  } finally { X.lock = false; }
 }
 function setMod(x, y, ch) {
   (G.mods[G.map] = G.mods[G.map] || {})[x + ',' + y] = ch;
@@ -92,7 +140,7 @@ function reveal() {
 }
 function draw() {
   View3D.render(X.cam, X.M, X.sprites);
-  View3D.minimap($('#minimap'), X.M, G.seen[G.map], G.x, G.y, G.dir);
+  View3D.minimap($('#minimap'), X.M, G.seen[G.map], G.x, G.y, G.dir, lootSpots());
 }
 function facingText() {
   const [dx, dy] = DIRS[G.dir], ch = cell(G.x + dx, G.y + dy);
@@ -103,6 +151,9 @@ function facingText() {
   if (ch === '>') return 'Ahead: stairs leading down';
   if (ch === '<') return 'Ahead: stairs leading up';
   if (ch >= 'a' && ch <= 'z' && X.def.ev[ch] && X.def.ev[ch].type === 'chest' && !G.flags[G.map + ':' + ch]) return 'Ahead: a chest';
+  if (groundAt(G.x + dx, G.y + dy).length) return 'Ahead: something on the ground';
+  const here = groundAt().length;
+  if (here) return 'Here: ' + (here === 1 ? '1 item' : here + ' items') + ' on the ground';
   return '';
 }
 function refreshAll() {
@@ -123,7 +174,7 @@ function refreshAll() {
   $('#hudTime').textContent = timeText();
   $('#hudGold').textContent = G.gold + ' gp';
   $('#hudFace').textContent = facingText();
-  View3D.minimap($('#minimap'), X.M, G.seen[G.map], G.x, G.y, G.dir);
+  View3D.minimap($('#minimap'), X.M, G.seen[G.map], G.x, G.y, G.dir, lootSpots());
 }
 
 /* ---------------- movement ---------------- */
@@ -201,6 +252,7 @@ async function arrive(px, py) {
     enterMap(); log('— ' + X.def.name + ' —', 'round'); saveGame('auto');
     return;
   }
+  if (groundAt().length) await lootHere();
   if (ch >= 'a' && ch <= 'z' && def.ev[ch]) return runEvent(ch, def.ev[ch], px, py);
   if (def.wander && Math.random() < def.wander.chance) {
     const [id, n] = pick(def.wander.table);

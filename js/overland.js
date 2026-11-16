@@ -342,6 +342,16 @@ const Over = (() => {
       if (sx < -80 || sx > VW + 80 || sy < -20 || sy > VH + 40) continue;
       c.lineWidth = 3; c.strokeStyle = 'rgba(10,8,6,.85)'; c.strokeText(def.sites[k].name, sx, sy); c.fillStyle = '#f3e3b5'; c.fillText(def.sites[k].name, sx, sy);
     }
+    // dropped gear
+    for (const p of lootSpots()) {
+      if (!seen[p.y * W + p.x]) continue;
+      const lx = p.x * TS + TS * 0.5 - vx, ly = p.y * TS + TS * 0.8 - vy;
+      c.save(); c.translate(lx, ly); c.scale(2, 2);
+      c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.ellipse(1, 2, 6, 2.2, 0, 0, 6.3); c.fill();
+      c.fillStyle = '#7d6440'; c.strokeStyle = '#2a1d10'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(-4, 1); c.quadraticCurveTo(-6, -6, -1.5, -7); c.lineTo(1.5, -7); c.quadraticCurveTo(6, -6, 4, 1); c.closePath(); c.fill(); c.stroke();
+      c.fillStyle = '#d4af37'; c.fillRect(-1.5, -9, 3, 2); c.beginPath(); c.ellipse(5.5, 1.5, 1.6, 0.9, 0, 0, 6.3); c.fill();
+      c.restore();
+    }
     // party token
     const onSite = !anim && def.sites[at(G.x, G.y)], px = cam.x * TS + TS / 2 - vx + (onSite ? 13 : 0), py = cam.y * TS + TS * 0.7 - vy + (onSite ? 10 : 0), lead = P().find(ch => !ch.dead && ch.hp > 0) || P()[0];
     c.fillStyle = 'rgba(0,0,0,.45)'; c.beginPath(); c.ellipse(px + 2, py + 2, 16, 7, 0, 0, 6.3); c.fill();
@@ -400,6 +410,8 @@ const Over = (() => {
     g.drawImage(mini, ox, oy, W * k, H * k);
     const seen = G.seen[G.map]; g.fillStyle = '#0b0c11';
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!seen[y * W + x]) g.fillRect(Math.floor(ox + x * k), Math.floor(oy + y * k), Math.ceil(k), Math.ceil(k));
+    g.fillStyle = '#ffe38a';
+    for (const p of lootSpots()) if (seen[p.y * W + p.x]) g.fillRect(Math.floor(ox + p.x * k), Math.floor(oy + p.y * k), Math.max(2, Math.ceil(k)), Math.max(2, Math.ceil(k)));
     g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 1.5;
     g.beginPath(); g.arc(ox + (G.x + 0.5) * k, oy + (G.y + 0.5) * k, Math.max(2.5, k * 0.6), 0, 6.3); g.fill(); g.stroke();
   }
@@ -440,7 +452,7 @@ function wildCmds() {
     { label: '↖', key: 'Q', on: go(-1, -1) }, { label: 'North', key: 'W', on: go(0, -1) }, { label: '↗', key: 'E', on: go(1, -1) },
     { label: 'West', key: 'A', on: go(-1, 0) }, { label: 'South', key: 'S', on: go(0, 1) }, { label: 'East', key: 'D', on: go(1, 0) },
     { label: '↙', key: 'Z', on: go(-1, 1) }, { label: '↘', key: 'C', on: go(1, 1) },
-    { label: 'Visit', key: 'Enter', on: () => { const k = Over.at(G.x, G.y); if (X.def.sites[k]) visitSite(k); else log('There is nothing here but ' + Over.terr(G.x, G.y).name.toLowerCase() + '.', 'dim'); } },
+    { label: 'Visit', key: 'Enter', on: () => { const k = Over.at(G.x, G.y); if (X.def.sites[k]) visitSite(k); else if (groundAt().length) lootHere(); else log('There is nothing here but ' + Over.terr(G.x, G.y).name.toLowerCase() + '.', 'dim'); } },
     { label: 'Camp', key: 'R', on: wildCamp }, { label: 'Menu', key: 'Esc', on: menuDialog },
   ], 'Click the map to walk toward a point. Travel time depends on terrain and your slowest member\'s movement rate.');
 }
@@ -461,6 +473,7 @@ async function wildMove(dx, dy) {
   if (before < 600 && G.march >= 600) log('The party has been on the march for ten hours. Everyone is footsore; travel will be slower until you make camp.', 'bad');
   tickEffects(); Over.reveal(); Over.draw(); refreshAll();
   if (partyDown()) return;
+  if (groundAt().length) await lootHere();
   const ch = Over.at(nx, ny);
   if (X.def.sites[ch]) return visitSite(ch);
   const chance = 1 - Math.pow(1 - t.enc * (Over.night() ? 1.5 : 1), mins / 60);

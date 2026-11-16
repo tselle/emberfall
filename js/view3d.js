@@ -91,6 +91,14 @@ const View3D = (() => {
     TEX.chest = mkTex(x => { x.fillStyle = '#1a120b'; x.fillRect(15, 39, 34, 23); x.fillStyle = '#7a4f28'; x.fillRect(16, 46, 32, 15);
       x.beginPath(); x.moveTo(16, 46); x.quadraticCurveTo(32, 32, 48, 46); x.closePath(); x.fill();
       x.fillStyle = '#d4af37'; x.fillRect(16, 45, 32, 2); x.fillRect(21, 40, 3, 21); x.fillRect(40, 40, 3, 21); x.fillRect(30, 46, 4, 6); });
+    // dropped gear: a tied sack, a blade and a few coins lying on the floor
+    TEX.loot = mkTex(x => {
+      x.fillStyle = 'rgba(0,0,0,.45)'; x.beginPath(); x.ellipse(32, 60, 20, 3.5, 0, 0, 6.3); x.fill();
+      x.strokeStyle = '#b9c0c8'; x.lineWidth = 2; x.beginPath(); x.moveTo(12, 59); x.lineTo(40, 55); x.stroke();
+      x.strokeStyle = '#6b4a22'; x.lineWidth = 3; x.beginPath(); x.moveTo(40, 55); x.lineTo(47, 54); x.stroke();
+      x.fillStyle = '#7d6440'; x.beginPath(); x.moveTo(24, 59); x.quadraticCurveTo(18, 46, 28, 43); x.lineTo(36, 43); x.quadraticCurveTo(46, 46, 40, 59); x.closePath(); x.fill();
+      x.fillStyle = '#5e4a2e'; x.fillRect(27, 41, 10, 3); x.fillStyle = '#93784e'; x.fillRect(29, 37, 6, 4);
+      x.fillStyle = '#d4af37'; for (const [cx, cy] of [[44, 59], [48, 58], [20, 60]]) { x.beginPath(); x.ellipse(cx, cy, 2.5, 1.3, 0, 0, 6.3); x.fill(); } });
     const stair = up => x => { x.fillStyle = '#5c5f66'; x.beginPath(); x.moveTo(10, 64); x.lineTo(10, 26); x.arc(32, 26, 22, Math.PI, 0); x.lineTo(54, 64); x.closePath(); x.fill();
       x.fillStyle = up ? '#2a3550' : '#07070a'; x.beginPath(); x.moveTo(15, 64); x.lineTo(15, 27); x.arc(32, 27, 17, Math.PI, 0); x.lineTo(49, 64); x.closePath(); x.fill();
       for (let i = 0; i < 5; i++) { x.fillStyle = up ? shade('#8a8d94', -i * 0.1) : shade('#55585f', -i * 0.17); if (up) x.fillRect(15 + i * 2.5, 58 - i * 7, 34 - i * 5, 6); else x.fillRect(15 + i * 3, 58 - i * 5, 34 - i * 6, 4); }
@@ -452,7 +460,7 @@ const View3D = (() => {
     ctx.putImageData(img, 0, 0);
   }
 
-  function minimap(canvas, M, explored, px, py, dir) {
+  function minimap(canvas, M, explored, px, py, dir, marks) {
     const c = canvas.getContext('2d'), cs = Math.floor(Math.min(canvas.width / M.w, canvas.height / M.h));
     const ox = (canvas.width - cs * M.w) >> 1, oy = (canvas.height - cs * M.h) >> 1;
     c.fillStyle = '#0b0c11'; c.fillRect(0, 0, canvas.width, canvas.height);
@@ -465,6 +473,8 @@ const View3D = (() => {
       else if (ch === '<' || ch === '>') col = '#58c4dd';
       c.fillStyle = col; c.fillRect(ox + x * cs, oy + y * cs, cs, cs);
     }
+    c.fillStyle = '#ffe38a';
+    for (const m of marks || []) if (explored[m.y * M.w + m.x]) { c.beginPath(); c.arc(ox + (m.x + 0.5) * cs, oy + (m.y + 0.5) * cs, Math.max(1.5, cs * 0.28), 0, 6.3); c.fill(); }
     const cx = ox + (px + 0.5) * cs, cy = oy + (py + 0.5) * cs, a = (dir - 1) * Math.PI / 2;
     c.save(); c.translate(cx, cy); c.rotate(a); c.fillStyle = '#ffd24a'; c.strokeStyle = '#000'; c.lineWidth = 1;
     c.beginPath(); c.moveTo(cs * 0.75, 0); c.lineTo(-cs * 0.55, -cs * 0.55); c.lineTo(-cs * 0.2, 0); c.lineTo(-cs * 0.55, cs * 0.55); c.closePath(); c.fill(); c.stroke(); c.restore();

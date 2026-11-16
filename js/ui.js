@@ -191,10 +191,17 @@ function showSheet(ch) {
         (it.t === 'p' || it.t === 'x') ? h('button', { class: 'btn mini', text: it.t === 'x' ? 'Learn' : 'Use', disabled: !alive, onclick: () => useItem(id) }) : null,
         others.length ? h('select', { class: 'mini', onchange: e => { const t = P().find(c => c.id === e.target.value); if (t) { ch.inv.splice(idx, 1); t.inv.push(id); msg = it.name + ' given to ' + t.name + '.'; render(); } } },
           h('option', { value: '', text: 'Give…' }), others.map(c => h('option', { value: c.id, text: c.name }))) : null,
-        it.t !== 'q' ? h('button', { class: 'btn mini dim', text: 'Drop', onclick: () => { ch.inv.splice(idx, 1); msg = it.name + ' dropped.'; render(); } }) : null)); });
+        it.t !== 'q' ? h('button', { class: 'btn mini dim', text: 'Drop', title: 'Leave it on the ground here. It can be picked up again later.', onclick: () => { if (dropItem(ch, idx) != null) msg = it.name + ' dropped on the ground.'; render(); } }) : null)); });
+    const ground = (G && X.def) ? groundAt() : [];
+    const groundRows = ground.map((id, i) => { const it = item(id); return h('tr', null,
+      h('td', { text: it.name, class: it.magic ? 'magic' : '', title: itemDesc(it) }), h('td', { class: 'note', text: itemDesc(it) }),
+      h('td', { class: 'acts' }, h('button', { class: 'btn mini', text: 'Take', disabled: !alive || Combat.active, title: Combat.active ? 'Not in the middle of a fight.' : '',
+        onclick: () => { if (takeFromGround(ch, i) != null) msg = ch.name + ' picks up ' + it.name + '.'; render(); } }))); });
     const right = h('div', { class: 'col' },
       h('h3', { text: 'Equipped' }), h('table', { class: 'inv' }, eqRows),
-      h('h3', { text: 'Pack' }), ch.inv.length ? h('table', { class: 'inv' }, invRows) : h('div', { class: 'dimtxt', text: 'Empty.' }));
+      h('h3', { text: 'Pack' }), ch.inv.length ? h('table', { class: 'inv' }, invRows) : h('div', { class: 'dimtxt', text: 'Empty.' }),
+      ground.length ? h('h3', { text: 'On the ground here' }) : null,
+      ground.length ? h('table', { class: 'inv' }, groundRows) : null);
 
     let spells = null;
     if (isCaster(ch)) {
