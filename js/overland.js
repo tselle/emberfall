@@ -583,21 +583,26 @@ async function friendlyEncounter(kind) {
 async function wildCamp() {
   if (busy()) return;
   const t = Over.terr(G.x, G.y), safe = Over.at(G.x, G.y) === 'S';
-  if (await choice('Make Camp', 'Rest here for eight hours? Spells will be memorized, each character recovers 1 hit point, and the march fatigue passes.' + (safe ? '\nWithin the Dawnstones no evil will trouble your sleep.' : '\nA watch will be kept, but in the ' + t.name.toLowerCase() + ' something may find you.'), [{ label: 'Rest', cls: 'primary' }, { label: 'Cancel', cls: 'dim' }])) return;
-  if (!safe) {
-    const hourly = (t.enc || 0.04) * (Over.night() ? 1.2 : 0.8);
-    for (let h = 0; h < 8; h++) if (Math.random() < hourly) {
-      G.time += h * 60; refreshAll();
-      log('Your camp is attacked in the night!', 'bad');
-      const e = rollEncounter(t);
-      if (e.friendly) continue;
-      return wildEncounter(t, G.x, G.y, Object.assign({}, e, { parley: null, text: 'The watch cries out! ' + e.text }));
+  const how = await campChoice('Rest here for eight hours? Spells will be memorized, each character recovers 1 hit point, and the march fatigue passes.' + (safe ? '\nWithin the Dawnstones no evil will trouble your sleep.' : '\nA watch will be kept, but in the ' + t.name.toLowerCase() + ' something may find you.'));
+  if (!how) return;
+  let rests = 0, cured = 0;
+  do {
+    if (how === 'heal') cured += campCures();
+    if (!safe) {
+      const hourly = (t.enc || 0.04) * (Over.night() ? 1.2 : 0.8);
+      for (let h = 0; h < 8; h++) if (Math.random() < hourly) {
+        const e = rollEncounter(t);
+        if (e.friendly) continue;
+        G.time += h * 60; campReport(rests, cured, true); refreshAll();
+        log('Your camp is attacked in the night!', 'bad');
+        return wildEncounter(t, G.x, G.y, Object.assign({}, e, { parley: null, text: 'The watch cries out! ' + e.text }));
+      }
     }
-  }
-  G.time += 480; G.march = 0;
-  for (const ch of P()) if (!ch.dead) { if (ch.hp < ch.maxhp) ch.hp = Math.max(0, ch.hp) + 1; memorizeAll(ch); ch.layUsed = false; }
-  tickEffects(); Over.reveal(); Over.draw();
-  log('You rest undisturbed for eight hours. Spells are memorized.', 'good');
+    campRest(); rests++;
+  } while (how === 'heal' && anyHurt() && rests < CAMP_MAX && !partyDown());
+  if (partyDown()) return;
+  Over.reveal(); Over.draw();
+  campReport(rests, cured);
   refreshAll(); saveGame('auto');
 }
 

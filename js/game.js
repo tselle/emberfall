@@ -418,19 +418,67 @@ function search() {
   if (!found) log('You search for ten minutes and find nothing.', 'dim');
   refreshAll();
 }
+/* ---------------- camping ---------------- */
+const CAMP_MAX = 14; // the most rests in a row "Rest until healed" will take
+const anyHurt = () => P().some(c => !c.dead && c.hp < c.maxhp);
+/* Ask how to camp. Returns 'rest', 'heal' (rest again and again, the healers tending the wounded, until all are whole) or null. */
+async function campChoice(text) {
+  const opts = [{ id: 'rest', label: 'Rest', cls: 'primary' }];
+  if (anyHurt()) {
+    opts.push({ id: 'heal', label: 'Rest until healed', title: 'Healers tend the wounded before each rest; the company rests until everyone is whole' });
+    text += '\nRest until healed: before each rest your clerics cast the cures they have left and paladins lay on hands, tending the worst hurt first. Sleep brings those powers back, and the company rests again until everyone is whole (' + CAMP_MAX + ' rests at most). Each rest carries the same risk, and an attack may find the healers spent.';
+  }
+  opts.push({ id: null, label: 'Cancel', cls: 'dim' });
+  const i = await choice('Make Camp', text, opts);
+  return opts[i] ? opts[i].id : null;
+}
+/* Before sleeping, the healers spend what sleep will bring back: clerics their remaining cures, paladins their
+   laying on of hands, each on whoever is worst hurt. Returns the hit points restored. */
+function campCures() {
+  let total = 0;
+  const worst = () => P().filter(c => !c.dead && c.hp < c.maxhp).sort((a, b) => a.hp / a.maxhp - b.hp / b.maxhp)[0];
+  const mend = (t, n) => { const was = Math.max(0, t.hp); t.hp = Math.min(t.maxhp, was + n); total += t.hp - was; };
+  for (const ch of P()) {
+    if (ch.dead || ch.hp <= 0) continue;
+    while (ch.mem.cureLight > 0) {
+      const t = worst(); if (!t) break;
+      ch.mem.cureLight--;
+      if (ch.cls === 'C' && rnd(100) <= clericFailure(ch.wis)) continue; // the prayer falters
+      mend(t, rnd(8));
+    }
+    if (ch.cls === 'P' && !ch.layUsed) { const t = worst(); if (t) { ch.layUsed = true; mend(t, ch.lvl * 2); } }
+  }
+  return total;
+}
+/* what eight hours of undisturbed rest do */
+function campRest() {
+  G.time += 480; G.march = 0;
+  for (const ch of P()) if (!ch.dead) { if (ch.hp < ch.maxhp) ch.hp = Math.max(0, ch.hp) + 1; memorizeAll(ch); ch.layUsed = false; }
+  tickEffects();
+}
+function campReport(rests, cured, cut) {
+  const span = rests === 1 ? 'eight hours' : rests + ' rests (' + rests * 8 + ' hours)';
+  if (cut) { if (rests || cured) log((rests ? 'After ' + span + ' of rest' : 'As the camp settles') + (cured ? ', with ' + cured + ' hit points restored by your healers' : '') + ', the peace is broken.', 'dim'); return; }
+  log('You rest undisturbed for ' + span + '. Spells are memorized.' + (cured ? ' Your healers restored ' + cured + ' hit points.' : '') + (rests > 1 && anyHurt() ? ' Some wounds have still not closed.' : ''), 'good');
+}
 async function camp() {
   if (busy()) return;
   if (isWild()) return wildCamp();
   if (X.def.safe) return log('The watch frowns on camping in the street. Take a room at ' + locName('inn') + '.', 'dim');
-  if (await choice('Make Camp', 'Rest here for eight hours? Spells will be memorized and each character recovers 1 hit point, but something may find you in the dark.', [{ label: 'Rest', cls: 'primary' }, { label: 'Cancel', cls: 'dim' }])) return;
-  if (X.def.wander && Math.random() < 0.35) {
-    const [id, n] = pick(X.def.wander.table);
-    return fight({ mons: [[id, n]], text: 'Your rest is cut short. Something has found your camp!' }, G.x, G.y);
-  }
-  G.time += 480; G.march = 0;
-  for (const ch of P()) if (!ch.dead) { if (ch.hp < ch.maxhp) ch.hp = Math.max(0, ch.hp) + 1; memorizeAll(ch); ch.layUsed = false; }
-  tickEffects();
-  log('You rest undisturbed for eight hours. Spells are memorized.', 'good');
+  const how = await campChoice('Rest here for eight hours? Spells will be memorized and each character recovers 1 hit point, but something may find you in the dark.');
+  if (!how) return;
+  let rests = 0, cured = 0;
+  do {
+    if (how === 'heal') cured += campCures();
+    if (X.def.wander && Math.random() < 0.35) {
+      campReport(rests, cured, true); refreshAll();
+      const [id, n] = pick(X.def.wander.table);
+      return fight({ mons: [[id, n]], text: 'Your rest is cut short. Something has found your camp!' }, G.x, G.y);
+    }
+    campRest(); rests++;
+  } while (how === 'heal' && anyHurt() && rests < CAMP_MAX && !partyDown());
+  if (partyDown()) return;
+  campReport(rests, cured);
   refreshAll();
 }
 /* the icons common to town, dungeon and wilderness */
