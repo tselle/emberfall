@@ -278,3 +278,13 @@ tr.unusable td { opacity: .5; }
   .mbody { margin: 6px 0 8px; }
   .bigmap { max-height: calc(98vh - 150px); }
 }
+
+/* party list: abilities that only rest or time restores */
+.pabil { display: flex; flex-wrap: wrap; gap: 2px 9px; margin-top: 3px; font-size: 11px; color: var(--dim); }
+.abil { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.abil em { font-style: normal; margin-right: 2px; }
+.abil i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid #6b6247; }
+.abil i.on { background: var(--gold); border-color: var(--gold); }
+.abil.fx { color: var(--spell); } .abil.bad { color: var(--bad); }
+.prest { font-size: 12px; color: var(--dim); text-align: center; padding: 2px 4px; }
+.prest.used { color: #e3b23c; }

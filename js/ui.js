@@ -129,10 +129,47 @@ const UI = {
           h('div', { class: 'pname' }, ch.name, canLevel(ch) ? h('span', { class: 'lvlup', text: '▲', title: 'Ready to train' }) : null),
           h('div', { class: 'psub', text: RACES[ch.race].name + ' ' + CLASSES[ch.cls].name + ' ' + ch.lvl }),
           h('div', { class: 'hpbar' }, h('div', { class: 'hpfill ' + (k > 0.5 ? 'ok' : k > 0.25 ? 'mid' : 'low'), style: 'width:' + k * 100 + '%' })),
-          h('div', { class: 'pstat' }, h('span', { text: 'HP ' + ch.hp + '/' + ch.maxhp }), h('span', { text: 'AC ' + charAC(ch) }), st !== 'OK' ? h('span', { class: 'bad', text: st }) : null)));
-    }));
+          h('div', { class: 'pstat' }, h('span', { text: 'HP ' + ch.hp + '/' + ch.maxhp }), h('span', { text: 'AC ' + charAC(ch) }), st !== 'OK' ? h('span', { class: 'bad', text: st }) : null),
+          abilityRow(ch)));
+    }), restNote());
   },
 };
+/* What a character has that only rest or time brings back: memorized spells (a pip for each, by spell level),
+   a paladin's laying on of hands, and spells still running. Gold is ready, hollow is spent. */
+function spentOf(ch) {
+  const out = [];
+  for (const id in ch.prep) { const n = ch.prep[id] - (ch.mem[id] || 0); if (SPELLS[id] && n > 0) out.push(SPELLS[id].name + (n > 1 ? ' ×' + n : '')); }
+  if (ch.cls === 'P' && ch.layUsed) out.push('Lay on hands');
+  return out;
+}
+function abilityRow(ch) {
+  if (ch.dead) return null;
+  const parts = [], pip = (on, title) => h('i', { class: on ? 'on' : '', title });
+  spellSlots(ch).forEach((n, i) => {
+    const ids = Object.keys(ch.prep).filter(id => SPELLS[id] && SPELLS[id].l === i + 1 && ch.prep[id] > 0);
+    if (!ids.length) return;
+    const pips = [];
+    for (const id of ids) for (let k = 0; k < ch.prep[id]; k++) pips.push(pip(k < (ch.mem[id] || 0), SPELLS[id].name + (k < (ch.mem[id] || 0) ? ': ready' : ': spent')));
+    pips.sort((a, b) => (b.className === 'on') - (a.className === 'on'));
+    parts.push(h('span', { class: 'abil', title: 'Level ' + (i + 1) + ' spells' }, h('em', { text: 'L' + (i + 1) }), pips));
+  });
+  if (ch.cls === 'P') parts.push(h('span', { class: 'abil', title: 'Lay on hands: heals ' + ch.lvl * 2 + ' hp, once a day' }, h('em', { text: 'Hands' }), pip(!ch.layUsed, ch.layUsed ? 'Spent' : 'Ready')));
+  if (ch.fx.armor > 0) parts.push(h('span', { class: 'abil fx', title: 'Armor spell: absorbs ' + ch.fx.armor + ' more damage', text: 'Armor ' + ch.fx.armor }));
+  if (ch.fx.strength) { const m = Math.max(0, ch.fx.strength.until - G.time); parts.push(h('span', { class: 'abil fx', title: 'Strength spell', text: 'Strength ' + (m >= 60 ? Math.ceil(m / 60) + 'h' : m + 'm') })); }
+  if (ch.poison) { const m = Math.max(0, ch.poison.at - G.time); parts.push(h('span', { class: 'abil bad', title: 'The venom takes hold when this runs out. Antivenom or Slow Poison stops it.', text: 'Venom ' + (m >= 60 ? Math.ceil(m / 60) + 'h' : m + 'm') })); }
+  if (!parts.length) return null;
+  const spent = spentOf(ch);
+  return h('div', { class: 'pabil', title: spent.length ? 'Spent: ' + spent.join(', ') : 'Everything ready' }, parts);
+}
+/* one line under the party list: what a night's rest would restore */
+function restNote() {
+  const spells = P().reduce((n, ch) => n + (ch.dead ? 0 : Object.keys(ch.prep).reduce((k, id) => k + Math.max(0, ch.prep[id] - (ch.mem[id] || 0)), 0)), 0);
+  const hands = P().filter(ch => !ch.dead && ch.cls === 'P' && ch.layUsed).length, bits = [];
+  if (spells) bits.push(spells + (spells === 1 ? ' spell' : ' spells'));
+  if (hands) bits.push('lay on hands');
+  if (G.march >= 600) bits.push('march fatigue');
+  return h('div', { class: 'prest' + (bits.length ? ' used' : ''), text: bits.length ? 'Spent: ' + bits.join(', ') + '. Rest to recover.' : 'All abilities ready.' });
+}
 function statusOf(ch) { return ch.dead ? 'Dead' : ch.hp <= 0 ? 'Unconscious' : ch.poison ? 'Poisoned' : 'OK'; }
 
 /* ---------------- equipment ---------------- */
