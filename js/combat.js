@@ -6,7 +6,7 @@
    attacks of opportunity, spells, turning undead, backstab.
    ============================================================ */
 const Combat = (() => {
-  const CW0 = 1040, CH = 650, HW = 36, HH = 18, US = 1.22, SS = 2; // US: unit draw scale. SS: pixels drawn per layout unit, for a sharp picture on large screens
+  const CW0 = 1040, CH0 = 650, HW = 36, HH = 18, US = 1.22, SS = 2; // US: unit draw scale. SS: pixels drawn per layout unit, for a sharp picture on large screens
   let S = null, cv, c, raf = 0;
   const THEMES = {
     dungeon: { a: '#5f574b', edge: '#2b2620', block: '#7a6f5d', bg0: '#1b1814', bg1: '#070605' },
@@ -79,11 +79,16 @@ const Combat = (() => {
   function back(id) { const m = MONSTERS[id]; return (m.spells ? 2 : 0) + (m.ranged ? 1 : 0); }
 
   /* ---------------- geometry / rendering ---------------- */
-  let CW = CW0; // the field widens to fill the page
+  let CW = CW0, CH = CH0;
+  /* The drawing area takes the shape of the box it is shown in, and is no bigger than the field needs,
+     so a small field is drawn large (which matters on a phone). */
   function fit() {
-    const w = fitWidth(cv, CH, CW0);
-    if (!w || w === CW) return;
-    CW = w; cv.width = CW * SS; if (S) buildFloor();
+    const w = cv.clientWidth, hh = cv.clientHeight;
+    if (!w || !hh || !S) return;
+    const a = clamp(w / hh, 1.6, 2.8), n = S.w + S.h;
+    const ch = Math.round(clamp(Math.max(n * HH + 170, (n * HW + 50) / a), 380, CH0)), cw = Math.round(ch * a / 2) * 2;
+    if (cw === CW && ch === CH) return;
+    CW = cw; CH = ch; cv.width = CW * SS; cv.height = CH * SS; buildFloor();
   }
   const OX = () => CW / 2 - (S.w - S.h) * HW / 2, OY = () => (CH - (S.w + S.h) * HH) / 2 + 24;
   const scr = (x, y) => [OX() + (x - y) * HW, OY() + (x + y) * HH + HH];   // tile centre

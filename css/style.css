@@ -4,7 +4,7 @@
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
-body { background: var(--bg); color: var(--ink); font: 14px/1.4 Georgia, 'Palatino Linotype', 'Book Antiqua', serif; overflow: hidden; user-select: none; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.4 Georgia, 'Palatino Linotype', 'Book Antiqua', serif; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; -webkit-text-size-adjust: 100%; }
 h1, h2, h3 { font-weight: 600; margin: 0; letter-spacing: .02em; }
 h2 { font-size: 22px; color: var(--gold); }
 h3 { font-size: 15px; color: var(--gold); margin: 10px 0 6px; border-bottom: 1px solid var(--line); padding-bottom: 3px; }
@@ -168,14 +168,14 @@ tr.unusable td { opacity: .5; }
 .shop .gold { margin-left: auto; font-size: 16px; }
 
 /* on-screen movement pad (tablets and phones) */
-#navlayer { position: absolute; inset: 0; pointer-events: none; z-index: 3; container-type: inline-size; }
-.navpad, .navtoggle { --nb: clamp(44px, 10.5cqw, 88px); }
+#navlayer { position: absolute; inset: 0; pointer-events: none; z-index: 3; container-type: size; }
+.navpad, .navtoggle { --nb: clamp(40px, min(10.5cqw, 23cqh), 88px); }
 #viewport:has(#combatCanvas[style*="block"]) #navlayer { display: none; }
 .navbtn, .navtoggle { pointer-events: auto; font: inherit; color: #fff; background: rgba(18,20,28,.55); border: 1.5px solid rgba(255,255,255,.55); cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; padding: 0; display: flex; align-items: center; justify-content: center; }
 .navpad { position: absolute; bottom: 2.2%; display: grid; grid-template-columns: repeat(3, var(--nb)); gap: calc(var(--nb) * .09); opacity: .34; transition: opacity .15s; }
 .navpad.left { left: 1.6%; } .navpad.right { right: 1.6%; }
 .navpad:hover, .navpad:active { opacity: .6; }
-.navpad.wild { --nb: clamp(42px, 8.6cqw, 74px); }
+.navpad.wild { --nb: clamp(36px, min(8.6cqw, 16cqh), 74px); }
 .navbtn { width: var(--nb); height: var(--nb); border-radius: 22%; font-size: calc(var(--nb) * .5); line-height: 1; text-shadow: 0 1px 3px #000; }
 .navbtn.down { background: rgba(227,181,74,.75); border-color: #fff; transform: scale(.94); }
 .navtoggle { position: absolute; left: 1.2%; top: 1.6%; width: calc(var(--nb) * .52); height: calc(var(--nb) * .52); min-width: 34px; min-height: 34px; border-radius: 50%; font-size: 18px; opacity: .4; }
@@ -240,3 +240,41 @@ tr.unusable td { opacity: .5; }
 ::-webkit-scrollbar { width: 9px; } ::-webkit-scrollbar-thumb { background: #3a3f52; border-radius: 5px; } ::-webkit-scrollbar-track { background: transparent; }
 @media (max-width: 700px) { #hudFace, #hudDir { display: none; } #hud { gap: 9px; } .btn.cmd.ico { width: 52px; height: 48px; } }
 @media (max-width: 900px) { .cols, .roster, .modgrid { grid-template-columns: 1fr; } }
+
+/* ---------------- phones ---------------- */
+@media (max-width: 600px) {
+  .modal { padding: 12px 14px; max-height: 96vh; max-height: 96dvh; }
+  .grid2 { grid-template-columns: 1fr; }
+  .panel { padding: 14px; }
+}
+/* upright phone: the icons run the full width under the view, with the log and the minimap side by side below them */
+@media (max-width: 560px) and (orientation: portrait) {
+  #game { padding: 6px; --bot: 250px; }
+  #bottom { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr); gap: 5px 6px; align-items: stretch; }
+  #left { display: contents; }
+  #cmdbar { grid-column: 1 / -1; gap: 4px; }
+  #cmdhint { grid-column: 1 / -1; }
+  #log { grid-row: 3; grid-column: 1; }
+  #minimap { grid-row: 3; grid-column: 2; width: 42vw; height: auto; align-self: start; }
+  .btn.cmd.ico { width: calc((100vw - 12px - 24px) / 7 - .1px); height: 46px; }
+  .btn.cmd.ico .cap { font-size: 9.5px; }
+}
+/* phone on its side: the view takes the full height, with the icons and the log in a column on the right (no minimap; the Map icon opens the full map) */
+@media (max-height: 520px) and (orientation: landscape) {
+  #game.active { display: grid; grid-template-columns: minmax(0, 1fr) 248px; grid-template-rows: 32px minmax(0, 1fr); gap: 5px; padding: 5px max(5px, env(safe-area-inset-right)) 5px max(5px, env(safe-area-inset-left)); --hud: 32px; --view: calc(100vh - 49px); }
+  @supports (height: 100dvh) { #game.active { --view: calc(100dvh - 49px); } }
+  #hud { grid-column: 1 / -1; }
+  .hudbtn { height: 26px; }
+  #viewport { width: auto; height: auto; min-height: 0; }
+  #bottom { flex-direction: column; align-items: stretch; gap: 4px; min-height: 0; }
+  #left { flex: 1; height: auto; min-height: 0; }
+  #minimap, #cmdhint { display: none; }
+  #cmdbar { gap: 4px; }
+  .btn.cmd.ico { width: 46px; height: 42px; }
+  .btn.cmd.ico .ic { width: 21px; height: 21px; }
+  .btn.cmd.ico .cap { font-size: 9.5px; }
+  #party { top: 40px; max-height: calc(100% - 44px); }
+  .modal { padding: 10px 14px; max-height: 98vh; max-height: 98dvh; }
+  .mbody { margin: 6px 0 8px; }
+  .bigmap { max-height: calc(98vh - 150px); }
+}
