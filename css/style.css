@@ -156,6 +156,11 @@ tr.unusable td { opacity: .5; }
 .sub { color: var(--dim); font-size: 13px; }
 .saves { font-size: 13px; color: var(--dim); display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
 .saves b { color: var(--ink); font-weight: 600; }
+.traits { font-size: 13px; color: var(--dim); display: grid; gap: 3px; margin-top: 4px; }
+.traits b { color: var(--ink); font-weight: 600; }
+.trait { display: grid; grid-template-columns: 10em 1fr; gap: 10px; line-height: 1.35; }
+.trait .tk { color: var(--ink); }
+@media (max-width: 560px) { .trait { grid-template-columns: 1fr; gap: 0; } }
 .slvl { color: #cfe3ff; margin-top: 8px; font-size: 13px; }
 .ready { color: var(--good); font-size: 12px; margin-right: 8px; }
 .cnt { display: inline-block; min-width: 16px; text-align: center; }

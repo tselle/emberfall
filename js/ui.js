@@ -194,6 +194,70 @@ function itemDesc(it) {
   if (it.t === 'v') return 'Worth ' + it.cost + ' gp to any merchant';
   return 'Quest item';
 }
+/* Everything about a character that the rules act on, in words, with this character's numbers. */
+function traitList(ch) {
+  const out = [], fmt = n => (n >= 0 ? '+' : '') + n, C = CLASSES[ch.cls], w = wpn(ch);
+  const quiet = (ch.race === 'elf' || ch.race === 'halfling') && (!ch.eq.armor || ['leather', 'studded', 'padded'].includes(baseId(ch.eq.armor)));
+  const stealth = quiet ? ' In light armor, helps the party catch monsters unawares.' : ' In metal armor, too noisy to help the party catch monsters unawares.';
+  const warHalves = ch.lvl >= 13 ? 4 : ch.lvl >= 7 ? 3 : 2;
+  const atks = n => halvesText(n) + (n === 2 ? ' attack' : ' attacks') + ' per round';
+  const andList = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+  // class
+  if (ch.cls === 'F') {
+    if (ch.spec) {
+      const on = isSpecialized(ch, ch.eq.weapon);
+      out.push(['Weapon specialization', (ITEMS[ch.spec] ? ITEMS[ch.spec].name : ch.spec) + ': +1 to hit, +2 damage, ' + atks(warHalves + 1) + (on ? ' (wielded now).' : '. Not wielded now, so the ' + w.name.toLowerCase() + ' gets no bonus.')]);
+    } else out.push(['Weapon specialization', 'None chosen.']);
+  }
+  if (C.group === 'warrior') out.push(['Warrior', atks(warHalves) + ' with an ordinary weapon (3/2 from 7th level, 2 from 13th). Can have exceptional Strength (18/01-18/00). Constitution above 16 adds extra hit points.']);
+  if (ch.cls === 'C') {
+    const fail = clericFailure(ch.wis), bonus = wisBonusSpells(ch.wis);
+    out.push(['Turn undead', 'As a level ' + turnLevel(ch) + ' cleric.']);
+    out.push(['Priest spells', (bonus.length ? 'Bonus spells from Wisdom ' + ch.wis + ': ' + bonus.map((n, i) => '+' + n + ' of level ' + (i + 1)).join(', ') + '. ' : 'No bonus spells from Wisdom. ') + (fail ? fail + '% chance any spell fails (Wisdom ' + ch.wis + ').' : 'No chance of spell failure.')]);
+    out.push(['Weapons', 'Blunt weapons only. Any armor and shield.']);
+  }
+  if (ch.cls === 'M') {
+    out.push(['Spellbook', ch.book.length + ' spells known. ' + learnChance(ch.int) + '% chance to learn a spell from a scroll (Intelligence ' + ch.int + ').']);
+    out.push(['Weapons', 'Dagger, staff, dart or sling. No armor or shield.']);
+  }
+  if (ch.cls === 'T') out.push(['Thief', 'Backstab: +4 to hit and ×' + backstabMult(ch) + ' damage when hidden, or against a foe an ally stands behind. Leather armor only. Creeps up on unaware monsters and listens at doors.']);
+  if (ch.cls === 'P') out.push(['Paladin', '+2 on all saving throws (included above). Priest spells from 9th level' + (ch.lvl >= 9 ? ', cast as a level ' + casterLevel(ch) + ' priest.' : '.')]);
+  if (ch.cls === 'R') out.push(['Ranger', 'Monsters catch a company with a ranger by surprise less often (1 in 6 instead of 2 in 6).']);
+  // race
+  const ms = Math.floor(ch.con / 3.5);
+  const RT = {
+    dwarf: 'Saves +' + ms + ' against rods, staves, wands, spells and poison (Constitution ' + ch.con + '). +1 to hit orcs and goblins. Ogres, trolls and giants suffer -4 to hit.',
+    gnome: 'Saves +' + ms + ' against rods, staves, wands and spells (Constitution ' + ch.con + '). +1 to hit kobolds and goblins. Gnolls, ogres and giants suffer -4 to hit.',
+    halfling: 'Saves +' + ms + ' against rods, staves, wands, spells and poison (Constitution ' + ch.con + '). +1 to hit with slings and thrown weapons.' + stealth,
+    elf: '90% resistance to sleep and charm. Immune to ghoul paralysis. +1 to hit with bows, long swords and short swords. May notice secret doors in passing, and finds them more easily when searching.' + stealth,
+    halfelf: '30% resistance to sleep and charm. May notice secret doors in passing, and finds them more easily when searching.',
+    human: 'Any class.',
+  };
+  out.push([RACES[ch.race].name, RT[ch.race] || RACES[ch.race].notes]);
+  if (moveRate(ch) < 12) out.push(['Movement', moveRate(ch) + ', a little slower than a human. The party moves at its slowest member\'s pace.']);
+  // what the ability scores do beyond the table above
+  const sm = strMods(ch), dm = dexMods(ch);
+  out.push(['Ability scores', 'Forces doors ' + sm.open + ' in 20 (Strength). Missile ' + fmt(dm.missile) + ' to hit (Dexterity). ' + resurrectionChance(ch.con) + '% to survive being raised from the dead (Constitution). Reaction ' + fmt(chaReaction(ch.cha)) + ' when parleying (Charisma).']);
+  out.push(['Experience', C.prime.every(a => ch[a] >= 16) ? '+10% for ' + andList(C.prime.map(a => ABIL_NAMES[a])) + ' of 16 or more.' : 'No bonus (+10% needs ' + andList(C.prime.map(a => ABIL_NAMES[a])) + ' of 16 or more).']);
+  // worn magic
+  const mg = [], prot = wornSum(ch, 'prot'), acb = wornSum(ch, 'acBonus'), sb = wornSum(ch, 'saveBonus'), ls = wornStr(ch);
+  if (prot) mg.push('protection +' + prot + ' to AC and saves');
+  if (acb) mg.push('+' + acb + ' AC');
+  if (sb) mg.push('+' + sb + ' to saves');
+  if (wornHas(ch, 'displace')) mg.push('displacement (+2 AC and saves)');
+  if (ls) mg.push('Strength ' + (ls[0] === 18 && ls[1] ? '18/' + (ls[1] === 100 ? '00' : String(ls[1]).padStart(2, '0')) : ls[0]));
+  if (wornSum(ch, 'strAdd')) mg.push('+' + wornSum(ch, 'strAdd') + ' Strength');
+  if (wornSum(ch, 'dexAdd')) mg.push('+' + wornSum(ch, 'dexAdd') + ' Dexterity');
+  for (const el of ['fire', 'cold', 'electricity', 'acid']) if (wornHas(ch, 'resist', el)) mg.push('half damage from ' + el);
+  if (wornHas(ch, 'free')) mg.push('free action (cannot be held or paralyzed)');
+  if (wornHas(ch, 'regen')) mg.push('regeneration');
+  if (wornHas(ch, 'speed')) mg.push('hasted in combat');
+  if (wornHas(ch, 'invis')) mg.push('begins each fight invisible');
+  if (wornHas(ch, 'noDrain')) mg.push('immune to level drain');
+  if (wornHas(ch, 'noPoison')) mg.push('immune to poison');
+  if (mg.length) out.push(['Magic worn', mg.join('; ') + '.']);
+  return out;
+}
 function itemBaseName(id) { return ITEMS[itemBase(id)] ? ITEMS[itemBase(id)].name : item(id).name; }
 function equip(ch, id) {
   const it = item(id), slot = slotOf(ch, it);
@@ -301,6 +365,7 @@ function showSheet(ch) {
       ch.cls === 'P' ? h('div', { class: 'saves', text: 'Aura of protection: evil foes within one square suffer -1 to hit.' + (turnLevel(ch) > 0 ? ' Turns undead as a level ' + turnLevel(ch) + ' cleric.' : ' Turns undead from level 3.') }) : null,
       ch.cls === 'P' ? h('div', { class: 'saves' }, 'Lay on hands: ' + ch.lvl * 2 + ' hp ', h('button', { class: 'btn mini', text: 'Use', disabled: ch.layUsed || !alive || Combat.active,
         onclick: async () => { const t = await pickMember('Lay hands on whom?', c => !c.dead); if (!t) return; ch.layUsed = true; t.hp = Math.min(t.maxhp, Math.max(0, t.hp) + ch.lvl * 2); msg = t.name + ' is healed for ' + ch.lvl * 2 + '.'; render(); } }), ch.layUsed ? ' (used today)' : '') : null,
+      h('div', { class: 'traits' }, h('b', { text: 'Abilities and traits' }), traitList(ch).map(([k, v]) => h('div', { class: 'trait' }, h('span', { class: 'tk', text: k }), h('span', { text: v })))),
       h('div', { class: 'row' },
         h('button', { class: 'btn mini', text: 'Move up in marching order', disabled: G.party.indexOf(ch.id) <= 0, onclick: () => { const i = G.party.indexOf(ch.id); G.party.splice(i, 1); G.party.splice(i - 1, 0, ch.id); msg = 'Marching order changed. The first three stand in the front rank.'; render(); } })),
       msg ? h('div', { class: 'msg', text: msg }) : null);
@@ -343,7 +408,7 @@ function showSheet(ch) {
               h('span', { class: 'cnt', text: ch.prep[id] || 0 }),
               h('button', { class: 'btn mini', text: '+', disabled: prepCount(ch, i + 1) >= n, onclick: () => { ch.prep[id] = (ch.prep[id] || 0) + 1; render(); } }))); })))));
     }
-    body.replaceChildren(h('div', { class: 'cols' }, left, right), spells);
+    body.replaceChildren(h('div', { class: 'cols' }, left, right), ...(spells ? [spells] : []));
   }
   render();
 }
