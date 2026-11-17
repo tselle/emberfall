@@ -111,7 +111,7 @@ async function unawares(e, px, py) {
     const t = thiefSkills(thief);
     if (rnd(100) > t.ms) return battle(e, px, py, { surprise: 'none', text: thief.name + ' creeps forward, and a loose stone skitters away underfoot. They have heard!' });
     const hid = rnd(100) <= t.hs;
-    return battle(e, px, py, { surprise: 'enemy', hidden: hid ? [thief.id] : [], text: hid ? thief.name + ' slips through the shadows unseen and unheard, a blade ready for the first unguarded back. The others follow on the signal.' : thief.name + ' gets close without a sound, but there is no cover left for the last few steps. Still, the party has the first move.' });
+    return battle(e, px, py, { surprise: 'enemy', unseen: hid ? [thief.id] : [], text: hid ? thief.name + ' slips through the shadows unseen and unheard, a blade ready for the first unguarded back. The others follow on the signal.' : thief.name + ' gets close without a sound, but there is no cover left for the last few steps. Still, the party has the first move.' });
   }
   Watch.unaware.add(e.key);
   if (o.id === 'back') { G.x = px; G.y = py; setCam(); reveal(); draw(); refreshAll(); log('You back away. They have not seen you.', 'dim'); }

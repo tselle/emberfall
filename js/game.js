@@ -295,7 +295,7 @@ async function fight(spec, px, py) {
   if (spec.text) await msgBox('Encounter!', encounterBody(spec.text, mons), 'To arms!');
   const ex = exploreCanvas();
   ex.style.display = 'none';
-  const res = await Combat.start({ mons, arena: spec.arena || X.def.arena || 'street', party: P(), surprise: spec.surprise, night: spec.night, hidden: spec.hidden });
+  const res = await Combat.start({ mons, arena: spec.arena || X.def.arena || 'street', party: P(), surprise: spec.surprise, night: spec.night, unseen: spec.unseen });
   ex.style.display = 'block';
   X.lock = false;
   if (res.result === 'lose') { refreshAll(); gameOver(); return 'lose'; }

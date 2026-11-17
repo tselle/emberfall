@@ -72,7 +72,7 @@ const Combat = (() => {
     } else for (let i = 0, n = 3 + rnd(4); i < n; i++) S.grid[key(5 + Math.floor(Math.random() * 4), Math.floor(Math.random() * S.h))] = 1 + Math.floor(Math.random() * 3);
     const pslots = [[3, 4], [3, 5], [3, 3], [1, 4], [1, 5], [1, 3]];
     spec.party.filter(ch => ch.hp > 0 && !ch.dead).forEach((ch, i) => S.units.push(mkPC(ch, pslots[i][0], pslots[i][1])));
-    for (const u of S.units) if (u.pc && (spec.hidden || []).includes(u.ch.id)) u.hidden = true; // a thief who crept up unseen
+    for (const u of S.units) if (u.pc && Array.isArray(spec.unseen) && spec.unseen.includes(u.ch.id)) u.hidden = true; // a thief who crept up unseen
     const list = [];
     for (const [id, n] of spec.mons) { const cnt = typeof n === 'number' ? n : Math.max(1, rollDice(n)); for (let i = 0; i < cnt; i++) list.push({ id, n: cnt > 1 ? i + 1 : 0 }); }
     list.sort((a, b) => back(a.id) - back(b.id));
