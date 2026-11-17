@@ -346,6 +346,14 @@ const Combat = (() => {
   }
   function flanked(a, t) { const o = unitAt(2 * t.x - a.x, 2 * t.y - a.y); return !!o && o.side === a.side && o !== a && canAct(o); }
 
+  /* evil creatures within one square of a paladin who is on their feet fight at -1 to hit */
+  function inAura(a) { return S.units.some(p => p.pc && p.side !== a.side && p.ch.cls === 'P' && canAct(p) && cheb(p, a) <= 1); }
+  /* a ranger fighting with two weapons follows the first melee attack of each round with an off-hand strike */
+  async function offhand(u, t) {
+    if (!u.pc || !twoWeapon(u.ch) || u.offRound === S.round || !alive(t) || !canAct(u) || cheb(u, t) !== 1) return;
+    u.offRound = S.round;
+    await strike(u, t, { off: true });
+  }
   async function strike(a, t, o) {
     o = o || {};
     faceTo(a, t);
@@ -357,11 +365,13 @@ const Combat = (() => {
         if (w.thrown) { hitB += sm.hit; dmgB += sm.dmg; }
         if (ch.race === 'elf' && w.bow) hitB++;
         if (ch.race === 'halfling' && !w.bow && baseId(ch.eq.ranged) !== 'crossbow') hitB++;
-      } else {
+      } else if (o.off) { w = OFFHAND; hitB = sm.hit; dmgB = sm.dmg; }
+      else {
         w = wpn(ch); hitB = sm.hit + (w.bonus || 0); dmgB = sm.dmg + (w.bonus || 0);
         if (isSpecialized(ch, ch.eq.weapon)) { hitB += 1; dmgB += 2; }
         if (ch.race === 'elf' && ['longsword', 'shortsword'].includes(baseId(ch.eq.weapon))) hitB++;
       }
+      if (!o.ranged && !t.pc) dmgB += foeDmg(ch, t.m.tags);
       dmgSpec = (!t.pc && t.m.size === 'L') ? w.dmgL : w.dmg; dt = w.dt;
     } else if (o.ranged) { dmgSpec = a.m.ranged.dmg; dt = 'B'; }
     else { dmgSpec = a.m.atk[o.i || 0]; dt = a.m.dt || 'S'; }
@@ -371,6 +381,7 @@ const Combat = (() => {
     if (S.prayer[a.side]) mods++;
     if (S.prayer[1 - a.side]) mods--;
     if (t.eff.protEvil && !a.pc && a.m.tags.includes('evil')) mods -= 2;
+    if (!a.pc && a.m.tags.includes('evil') && inAura(a)) mods -= 1; // a paladin's aura of protection
     if (o.ranged) {
       const rg = (a.pc ? w.range : a.m.ranged.range), d = edist(a, t);
       mods += d <= rg[0] * 3 ? 0 : d <= rg[1] * 3 ? -2 : -5;
@@ -393,14 +404,15 @@ const Combat = (() => {
     const hit = auto || roll === 20 || (roll !== 1 && roll + mods >= need);
     if (o.ranged) await shot(a, t, a.pc && w.bow ? '#e8d9b0' : '#cfcfcf', true);
     else { a.lunge = { dx: t.x - a.x, dy: t.y - a.y, t0: performance.now() }; await sleep(110); }
-    const how = o.free ? ' strikes at the fleeing ' : o.ranged ? ' shoots at ' : bs ? ' backstabs ' : ' attacks ';
+    const how = o.free ? ' strikes at the fleeing ' : o.ranged ? ' shoots at ' : o.off ? ' strikes off-hand at ' : bs ? ' backstabs ' : ' attacks ';
     const detail = auto ? 'helpless target' : 'd20 ' + roll + (mods ? sgn(mods) : '') + ' vs ' + need;
     if (!auto && t.images > 0 && Math.random() < t.images / (t.images + 1)) {
       t.images--; log(a.name + how + t.name + ' but only shatters a mirror image.'); float(t, 'image', '#c9a8ff'); await sleep(240); return;
     }
     if (!hit) { log(a.name + how + t.name + ': miss (' + detail + ').', 'dim'); float(t, 'miss', '#c9c9c9'); await sleep(240); return; }
     // some creatures are harmed only by magic (or silver) weapons
-    if (a.pc && !t.pc && t.m.hitBy && !(w && (w.bonus > 0 || (t.m.hitBy === 'silver' && w.silver)))) {
+    const hw = o.off ? wpn(a.ch) : w; // the off-hand blade harms what the main weapon can
+    if (a.pc && !t.pc && t.m.hitBy && !(hw && (hw.bonus > 0 || (t.m.hitBy === 'silver' && hw.silver)))) {
       log(a.name + how + t.name + ', but the blow has no effect! (' + (t.m.hitBy === 'silver' ? 'silver or magic' : 'magic') + ' weapons are needed)', 'bad');
       float(t, 'no effect', '#c9c9c9'); await sleep(260); return;
     }
@@ -732,6 +744,7 @@ const Combat = (() => {
         if (!adj.length) break;
         const t = adj.sort((a, b) => (helpless(b) - helpless(a)) || (a.hp - b.hp))[0];
         await strike(u, t, { i: u.pc ? 0 : i % u.m.atk.length });
+        await offhand(u, t);
       }
     }
   }
@@ -831,7 +844,7 @@ const Combat = (() => {
   }
   function tryAttack(u, t) {
     if (u.atk >= 0.999) return log('No attacks remaining this round.', 'dim');
-    if (cheb(u, t) === 1) return act(async () => { u.attacked = true; u.lastRanged = false; u.atk += 1 / nAttacks(u, false); u.mp = 0; await strike(u, t); });
+    if (cheb(u, t) === 1) return act(async () => { u.attacked = true; u.lastRanged = false; u.atk += 1 / nAttacks(u, false); u.mp = 0; await strike(u, t); await offhand(u, t); });
     if (!rwpn(u.ch)) return log('Too far away. Move adjacent to attack.', 'dim');
     if (foesOf(u).some(e => cheb(e, u) === 1)) return log('You cannot use a missile weapon with an enemy adjacent.', 'dim');
     if (edist(u, t) > maxRange(u)) return log('Out of range.', 'dim');

@@ -54,10 +54,10 @@ const CLASSES = {
        notes: 'Any weapon or armor. Weapon specialization: +1 to hit, +2 damage, 3 attacks per 2 rounds.' },
   P: { name: 'Paladin', group: 'warrior', hd: 10, req: { str: 12, con: 9, wis: 13, cha: 17 }, prime: ['str', 'cha'], gold: '5d4', align: ['LG'],
        xp: [0, 2250, 4500, 9000, 18000, 36000, 75000, 150000, 300000],
-       notes: 'Lawful good humans only. +2 to all saves, lay on hands (2 hp/level daily), turns undead from 3rd level.' },
+       notes: 'Lawful good humans only. +2 to all saves, lay on hands (2 hp/level daily). Aura of protection: evil foes within one square suffer -1 to hit. Turns undead from 3rd level, as a cleric two levels lower.' },
   R: { name: 'Ranger', group: 'warrior', hd: 10, req: { str: 13, dex: 13, con: 14, wis: 14 }, prime: ['str', 'dex', 'wis'], gold: '5d4', align: ['LG', 'NG', 'CG'],
        xp: [0, 2250, 4500, 9000, 18000, 36000, 75000, 150000, 300000],
-       notes: 'Good alignment. +4 to hit against a chosen species enemy.' },
+       notes: 'Good alignment. Against a chosen species enemy: +4 to hit and +1 melee damage per level. In light armor, with a one-handed weapon and no shield, fights with a second blade: an extra off-hand attack each round.' },
   M: { name: 'Mage', group: 'wizard', hd: 4, req: { int: 9 }, prime: ['int'], gold: '1d4+1',
        xp: [0, 2500, 5000, 10000, 20000, 40000, 60000, 90000, 135000],
        notes: 'Wizard spells from a spellbook. No armor; dagger, staff, dart or sling only.' },
@@ -338,6 +338,15 @@ function atkHalves(ch, ranged) {
 }
 function baseId(id) { return id ? (item(id).base || id) : null; }
 function isSpecialized(ch, weaponId) { return ch.cls === 'F' && !!ch.spec && baseId(weaponId) === ch.spec; }
+/* A ranger in leather or studded leather (or no armor), with a one-handed weapon and no shield, fights with a second
+   blade in the off hand: one extra attack each round, 1d6 with Strength bonuses but none from the main weapon. */
+const OFFHAND = { name: 'Off-hand blade', t: 'w', dmg: '1d6', dmgL: '1d6', sp: 2, dt: 'S', bonus: 0 };
+function twoWeapon(ch) {
+  const a = item(ch.eq.armor), w = item(ch.eq.weapon);
+  return ch.cls === 'R' && !!w && w.hands !== 2 && !ch.eq.shield && (!a || a.ac >= 7);
+}
+/* a ranger's extra melee damage against the chosen species enemy */
+function foeDmg(ch, tags) { return ch.cls === 'R' && ch.foe && tags.includes(ch.foe) ? ch.lvl : 0; }
 function meleeHalves(ch) {
   let h = 2;
   if (CLASSES[ch.cls].group === 'warrior' && ch.lvl >= 7) h = 3;
