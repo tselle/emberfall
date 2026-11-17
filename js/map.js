@@ -14,7 +14,7 @@ function mapMarks() {
   X.cells.forEach((row, y) => row.forEach((ch, x) => {
     if (ch >= 'a' && ch <= 'z') { const ev = X.def.ev[ch]; if (ev && ev.type === 'chest' && !G.flags[G.map + ':' + ch]) out.push({ x, y, kind: 'chest' }); }
   }));
-  return out;
+  return out.concat(foeMarks());
 }
 function mapOpts(big) {
   const locCol = {};
@@ -41,6 +41,8 @@ function mapInfoAt(x, y) {
   else if (ch === 'F') parts.push('A fountain');
   else if (ch === 'T') parts.push('A tree');
   else if (ch >= 'a' && ch <= 'z' && X.def.ev[ch] && X.def.ev[ch].type === 'chest' && !G.flags[G.map + ':' + ch]) parts.push('A chest, unopened');
+  const foe = foeAt(x, y);
+  if (foe && foeSeen(foe)) parts.push('Foes: ' + band(foe).map(([id, n]) => (n > 1 ? n + ' × ' : '') + MONSTERS[id].name).join(', '));
   const g = groundAt(x, y);
   if (g.length) parts.push('Dropped gear: ' + g.map(id => item(id).name).join(', '));
   if (x === G.x && y === G.y) parts.push('You are here');
@@ -97,6 +99,7 @@ function mapDialog() {
     if (has.stairs) keys.push(key(C.stairs, 'Stairs'));
     for (const id in LOC_COL) if (has[id]) keys.push(key(LOC_COL[id], locName(id)));
     if (mapMarks().some(m => m.kind === 'chest' && seen[m.y * X.M.w + m.x])) keys.push(key(C.chest, 'Chest'));
+    if (foeMarks().some(m => seen[m.y * X.M.w + m.x])) keys.push(key(C.foe, 'Monsters', 'dot'));
   }
   if (lootSpots().length) keys.push(key(View3D.MAPCOL.loot, 'Dropped gear', 'dot'));
   legend.replaceChildren(...keys);

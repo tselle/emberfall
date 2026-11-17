@@ -214,7 +214,7 @@ const MAPS = {
     locs: { 1: 'inn', 2: 'armory', 3: 'tavern', 4: 'apothecary', 5: 'temple', 6: 'hall', 7: 'training' },
     ev: {
       a: { type: 'text', once: true, text: 'Weathered steps descend beneath the broken arch of the Abbey of the Dawn. Cold air breathes up from the dark, carrying the smell of old smoke.' },
-      c: { type: 'enc', mons: [['thug', 4]], arena: 'street', text: 'Hooded figures peel away from the wall of the town hall. "Wrong alley, heroes. Purses on the ground."' },
+      c: { type: 'enc', hidden: true, mons: [['thug', 4]], arena: 'street', text: 'Hooded figures peel away from the wall of the town hall. "Wrong alley, heroes. Purses on the ground."' },
       d: { type: 'chest', gold: 60, items: ['potHeal'], text: 'Behind a loose stone the cutthroats kept their takings.' },
     },
   },
@@ -247,7 +247,7 @@ const MAPS = {
     lockText: 'A door of black iron bars the way south. Its lock is the size of a fist.',
     ev: {
       a: { type: 'enc', mons: [['goblin', 4], ['slinger', 1]], text: 'Torchlight flares ahead. Goblin sentries wearing red-daubed fangs on thongs shriek an alarm and charge!' },
-      b: { type: 'enc', mons: [['rat', 7]], text: 'The rotting grain sacks heave. A tide of giant rats pours out, eyes glittering.' },
+      b: { type: 'enc', hidden: true, mons: [['rat', 7]], text: 'The rotting grain sacks heave. A tide of giant rats pours out, eyes glittering.' },
       c: { type: 'chest', gold: 45, items: ['potHeal'], text: 'Among the split sacks sits a monk\'s strongbox, its hasp rusted through.' },
       d: { type: 'enc', mons: [['kobold', 8]], text: 'This was the abbey scriptorium. Now kobolds nest in the shredded books, and they do not welcome visitors.' },
       e: { type: 'enc', mons: [['chief', 1], ['hobgoblin', 1], ['goblin', 4], ['slinger', 1]], quest: 'redfang', text: 'On a throne of stacked pews lounges the Redfang chieftain. He points a notched axe at you and bellows for blood.' },
@@ -284,9 +284,9 @@ const MAPS = {
     ],
     stairs: { '<': { map: 'crypt1', x: 12, y: 18, dir: 0 } },
     ev: {
-      a: { type: 'enc', mons: [['skeleton', 5]], text: 'Bones are stacked to the ceiling in this ossuary. Five heaps rattle, assemble, and stand.' },
+      a: { type: 'enc', hidden: true, mons: [['skeleton', 5]], text: 'Bones are stacked to the ceiling in this ossuary. Five heaps rattle, assemble, and stand.' },
       b: { type: 'chest', gold: 180, items: ['mace1', 'potHeal'], text: 'An abbot\'s sarcophagus, its lid already ajar.' },
-      c: { type: 'enc', mons: [['spider', 4]], text: 'Webs thick as sailcloth drape the dry cistern. Dog-sized spiders descend on glistening threads.' },
+      c: { type: 'enc', hidden: true, mons: [['spider', 4]], text: 'Webs thick as sailcloth drape the dry cistern. Dog-sized spiders descend on glistening threads.' },
       d: { type: 'chest', gold: 140, items: ['antidote', 'shortbow1', 'scroll:mirrorImage'], text: 'A silk-wrapped corpse still clutches a satchel.' },
       e: { type: 'enc', mons: [['ghoul', 3]], text: 'The Shrine of the Dawn is defiled. Hunched things look up from their feast, grave-dirt on their claws.' },
       f: { type: 'chest', gold: 100, items: ['reliquary', 'potExtra'], quest: 'reliquary', text: 'Beneath the toppled altar gleams a casket of gold and amber: the Dawn Reliquary!' },

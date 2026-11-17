@@ -59,6 +59,7 @@ function buildSprites() {
     else if (ch >= 'a' && ch <= 'z') { const ev = X.def.ev[ch]; if (ev && ev.type === 'chest' && !G.flags[G.map + ':' + ch]) X.sprites.push({ x, y, tex: 'chest' }); }
   }));
   for (const p of lootSpots()) X.sprites.push({ x: p.x, y: p.y, tex: 'loot' });
+  X.sprites.push(...foeSprites());
 }
 
 /* ---------------- items on the ground ----------------
@@ -150,6 +151,8 @@ function facingText() {
   if (ch === 'G') return X.def.exit ? 'Ahead: ' + (X.def.exit.title || 'the gate').replace(/^The /, 'the ') : 'Ahead: the gate (barred)';
   if (ch === '>') return 'Ahead: stairs leading down';
   if (ch === '<') return 'Ahead: stairs leading up';
+  const foe = foeAt(G.x + dx, G.y + dy);
+  if (foe && (foeSeen(foe) || !foe.ev.hidden)) return 'Ahead: ' + bandName(foe.ev);
   if (ch >= 'a' && ch <= 'z' && X.def.ev[ch] && X.def.ev[ch].type === 'chest' && !G.flags[G.map + ':' + ch]) return 'Ahead: a chest';
   if (groundAt(G.x + dx, G.y + dy).length) return 'Ahead: something on the ground';
   const here = groundAt().length;
@@ -224,6 +227,8 @@ function move(fwd, side) {
   if (busy()) { later(() => move(fwd, side)); return; }
   const [fx, fy] = DIRS[G.dir], [sx, sy] = DIRS[(G.dir + 1) % 4];
   const nx = G.x + fx * fwd + sx * side, ny = G.y + fy * fwd + sy * side, ch = cell(nx, ny);
+  const foe = foeAt(nx, ny);
+  if (foe) { engage(foe); return; } // a band of monsters stands there
   if (isBlock(ch)) { if (fwd > 0) bump(nx, ny, ch); return; }
   const px = G.x, py = G.y;
   G.x = nx; G.y = ny;
@@ -274,7 +279,9 @@ async function arrive(px, py) {
     return;
   }
   if (groundAt().length) await lootHere();
+  if (await watchStep(px, py)) return;
   if (ch >= 'a' && ch <= 'z' && def.ev[ch]) return runEvent(ch, def.ev[ch], px, py);
+  listenAtDoors();
   if (def.wander && Math.random() < def.wander.chance) {
     const [id, n] = pick(def.wander.table);
     await fight({ mons: [[id, n]], text: 'Shapes move in the darkness ahead. Wandering monsters!' }, px, py);
@@ -288,7 +295,7 @@ async function fight(spec, px, py) {
   if (spec.text) await msgBox('Encounter!', encounterBody(spec.text, mons), 'To arms!');
   const ex = exploreCanvas();
   ex.style.display = 'none';
-  const res = await Combat.start({ mons, arena: spec.arena || X.def.arena || 'street', party: P(), surprise: spec.surprise, night: spec.night });
+  const res = await Combat.start({ mons, arena: spec.arena || X.def.arena || 'street', party: P(), surprise: spec.surprise, night: spec.night, hidden: spec.hidden });
   ex.style.display = 'block';
   X.lock = false;
   if (res.result === 'lose') { refreshAll(); gameOver(); return 'lose'; }
@@ -326,6 +333,10 @@ async function runEvent(ch, ev, px, py) {
     await msgBox(X.def.name, ev.text + (carrier ? '\n(' + ev.items.map(i => item(i).name).join(', ') + ' carried by ' + carrier.name + '.)' : ''));
     if (ev.quest) saveGame('auto');
   }
+  else if (ev.type === 'enc' && encs().some(e => e.ch === ch)) {
+    X.lock = true;
+    try { await meet(encs().find(e => e.ch === ch), px, py, 'step'); } finally { X.lock = false; }
+  }
   else if (ev.type === 'enc') {
     const r = await fight(ev, px, py);
     if (r === 'win') {
@@ -335,7 +346,10 @@ async function runEvent(ch, ev, px, py) {
     }
   } else if (ev.type === 'chest') {
     X.lock = true;
-    try { await openChest(key, ev); } finally { X.lock = false; }
+    try {
+      const g = await guardChest(ev, G.x, G.y);
+      if (g === null || g === 'win') await openChest(key, ev);
+    } finally { X.lock = false; }
   }
 }
 /* a commission's task is accomplished in the field; it is paid when reported at the hall */

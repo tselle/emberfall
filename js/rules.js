@@ -254,14 +254,14 @@ function turnLevel(ch) { return ch.cls === 'C' ? ch.lvl : ch.cls === 'P' ? ch.lv
 
 /* ---- Thief skills (PHB Tables 26-28) ---- */
 function thiefSkills(ch) {
-  const t = { ol: 10, ft: 5, ms: 10, hs: 5 };
+  const t = { ol: 10, ft: 5, ms: 10, hs: 5, hn: 15 + ({ dwarf: 15, gnome: 10, elf: 5, halfelf: 5, halfling: 5 }[ch.race] || 0) };
   const r = RACES[ch.race].th;
   for (const k in r) t[k] += r[k];
   const d = { 9: { ol: -10, ft: -10, ms: -20, hs: -10 }, 10: { ol: -5, ft: -10, ms: -15, hs: -5 }, 11: { ft: -5, ms: -10 }, 12: { ms: -5 },
               16: { ol: 5 }, 17: { ol: 10, ms: 5, hs: 5 }, 18: { ol: 15, ft: 5, ms: 10, hs: 10 }, 19: { ol: 20, ft: 10, ms: 15, hs: 15 } }[ch.dex] || {};
   for (const k in d) t[k] += d[k];
   // discretionary points: 60 at 1st level, 30 per level thereafter
-  t.ol += 20 + 10 * (ch.lvl - 1); t.ft += 20 + 10 * (ch.lvl - 1); t.ms += 10 + 5 * (ch.lvl - 1); t.hs += 10 + 5 * (ch.lvl - 1);
+  t.ol += 20 + 10 * (ch.lvl - 1); t.ft += 20 + 10 * (ch.lvl - 1); t.ms += 10 + 5 * (ch.lvl - 1); t.hs += 10 + 5 * (ch.lvl - 1); t.hn += 5 * (ch.lvl - 1);
   for (const k in t) t[k] = clamp(t[k], 1, 95);
   return t;
 }

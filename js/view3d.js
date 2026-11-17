@@ -642,9 +642,9 @@ const View3D = (() => {
     }
   }
   /* Draw the explored part of a map: the corner minimap, and (with o.big) the full-page map.
-     o.marks: [{x, y, kind: 'loot' | 'chest'}], o.locCol: colours for building doors by map character.
+     o.marks: [{x, y, kind: 'loot' | 'chest' | 'foe'}], o.locCol: colours for building doors by map character.
      Returns the layout so callers can add labels or turn a mouse position back into a square. */
-  const MAPCOL = { wall: '#454a58', floor: '#8d8474', door: '#c8923c', lock: '#c0392b', gate: '#7b808c', grass: '#3f5a3a', tree: '#27502a', water: '#3f7fbf', stairs: '#58c4dd', loot: '#ff9cf0', chest: '#e3b54a', you: '#ffd24a' };
+  const MAPCOL = { wall: '#454a58', floor: '#8d8474', door: '#c8923c', lock: '#c0392b', gate: '#7b808c', grass: '#3f5a3a', tree: '#27502a', water: '#3f7fbf', stairs: '#58c4dd', loot: '#ff9cf0', chest: '#e3b54a', foe: '#e0483c', you: '#ffd24a' };
   function minimap(canvas, M, explored, px, py, dir, o) {
     o = o || {};
     const c = canvas.getContext('2d'), pad = o.pad || 0;
@@ -678,6 +678,10 @@ const View3D = (() => {
         c.fillStyle = '#2a1a0c'; c.fillRect(mx - s - 1, my - s * 0.75 - 1, s * 2 + 2, s * 1.5 + 2);
         c.fillStyle = '#8a5a2c'; c.fillRect(mx - s, my - s * 0.75, s * 2, s * 1.5);
         c.fillStyle = MAPCOL.chest; c.fillRect(mx - s, my - s * 0.2, s * 2, Math.max(1, s * 0.3)); c.fillRect(mx - s * 0.2, my - s * 0.2, s * 0.4, s * 0.6);
+      } else if (m.kind === 'foe') {
+        const s = big ? cs * 0.26 : Math.max(2, cs * 0.36);
+        c.fillStyle = '#1a0404'; c.beginPath(); c.moveTo(mx, my - s - 1.5); c.lineTo(mx + s + 1.5, my); c.lineTo(mx, my + s + 1.5); c.lineTo(mx - s - 1.5, my); c.closePath(); c.fill();
+        c.fillStyle = MAPCOL.foe; c.beginPath(); c.moveTo(mx, my - s); c.lineTo(mx + s, my); c.lineTo(mx, my + s); c.lineTo(mx - s, my); c.closePath(); c.fill();
       } else {
         const s = big ? cs * 0.2 : Math.max(2, cs * 0.3);
         c.fillStyle = '#3a1030'; c.beginPath(); c.arc(mx, my, s + 1.5, 0, 6.3); c.fill();
@@ -689,5 +693,14 @@ const View3D = (() => {
     c.beginPath(); c.moveTo(cs * 0.75 * k, 0); c.lineTo(-cs * 0.55 * k, -cs * 0.55 * k); c.lineTo(-cs * 0.2 * k, 0); c.lineTo(-cs * 0.55 * k, cs * 0.55 * k); c.closePath(); c.fill(); c.stroke(); c.restore();
     return (canvas._geo = { ox, oy, cs, w: M.w, h: M.h });
   }
-  return { init, prepare, render, minimap, MAPCOL, get W() { return W; }, H, get coarse() { return coarse; }, get cost() { return cost; } };
+  /* A billboard of a monster, drawn from its combat figure: feet on the floor, a man-sized creature about
+     three-quarters the height of a wall, the biggest kept within the square. Made once per monster. */
+  function figTex(key, fig) {
+    if (!TEX[key]) {
+      const s = fig.s || 1, k = Math.min(0.8, 1.02 / s);
+      TEX[key] = mkTex(x => drawFig(x, Object.assign({}, fig, { still: true }), 32, fig.type ? 60 - 6 * k * s : 61, 0, { scale: k }));
+    }
+    return key;
+  }
+  return { init, prepare, render, minimap, figTex, MAPCOL, get W() { return W; }, H, get coarse() { return coarse; }, get cost() { return cost; } };
 })();

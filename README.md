@@ -46,6 +46,9 @@ What is in it:
 - **First-person exploration** of towns and dungeons in a textured 3D view, with
   shops, temples, inns, training halls, locked doors, secret doors, traps and
   treasure.
+- **Monsters you can see coming**: they stand on their own squares, notice you by
+  line of sight, guard their treasure, and can be caught unawares, crept up on
+  by a thief or heard through a door. A few lie in ambush.
 - **Overland travel** across the Emberwild, where terrain, time of day and
   fatigue affect travel and encounters.
 - **Tactical combat** on an isometric field: initiative, movement, melee and
@@ -103,6 +106,7 @@ js/journal.js     quest journal
 js/map.js         full-page map and minimap markers
 js/bestiary.js    bestiary and encounter portraits
 js/navpad.js      on-screen movement pad
+js/watch.js       monsters on the map: sight, surprise, guarded treasure, listening
 js/game.js        game state, saving, exploration and input
 ```
 
