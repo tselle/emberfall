@@ -288,3 +288,6 @@ tr.unusable td { opacity: .5; }
 .abil.fx { color: var(--spell); } .abil.bad { color: var(--bad); }
 .prest { font-size: 12px; color: var(--dim); text-align: center; padding: 2px 4px; }
 .prest.used { color: #e3b23c; }
+
+/* the tabs above the adventure chooser and the campaign log: the saga and each band of levels */
+.camptabs { gap: 6px; margin-bottom: 10px; }

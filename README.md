@@ -92,6 +92,7 @@ js/data.js        items, spells, monsters and the first adventure's maps
 js/modules.js     the adventure modules: maps, quests, encounters, extra monsters
 js/monsters.js    the wider bestiary: classic monsters not yet placed in any adventure
 js/treasure.js    magic items of the classic treasure tables, gems and jewelry, and treasure rolls
+js/adventures.js  fifty generated adventures (ten per band of levels), starting kits and shop stock
 js/figures.js     procedurally drawn character and monster figures
 js/view3d.js      the first-person raycasting renderer, textures and minimap
 js/ui.js          dialogs, command bar, party list, character sheets, shops

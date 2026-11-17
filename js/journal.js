@@ -67,7 +67,7 @@ function journalDialog(tab) {
     if (!ids.length) out.push(h('p', { class: 'jempty', text: 'You have taken on no work yet. ' + M.names.giver + ' at ' + theName(locName('hall')) + ' in ' + M.names.town + ' is looking for capable adventurers.' }));
     else out.push(ids.map(questCard));
     // earlier adventures in the saga
-    const past = (CAMPAIGN.order || []).filter(mid => mid !== G.module && MODULES[mid] && MODULES[mid].quests.concat(MODULES[mid].side).some(id => G.quests[id]));
+    const past = Object.keys(MODULES).filter(mid => mid !== G.module && MODULES[mid] && MODULES[mid].quests.concat(MODULES[mid].side).some(id => G.quests[id]));
     if (past.length) out.push(h('h3', { text: 'Earlier adventures' }), past.map(mid => {
       const P2 = MODULES[mid], all = P2.quests.concat(P2.side).filter(id => G.quests[id]);
       return h('details', { class: 'jpast' }, h('summary', { text: P2.code + ': ' + P2.name + (G.done.includes(mid) ? ' (complete)' : '') }),

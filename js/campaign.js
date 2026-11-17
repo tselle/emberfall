@@ -23,8 +23,8 @@ function locName(id) { return (mod().names || {})[id] || DEFAULT_NAMES[id] || id
 function shopStock(id) { const s = mod().shops || {}; return SHOPS[s[id] || (id === 'store' ? 'village' : id)]; }
 
 /* ---------------- fielding a party at the module's level ---------------- */
-function kitTier(lvl) { return lvl >= 5 ? 5 : lvl >= 3 ? 3 : 0; }
-const KIT_GOLD = { 3: 150, 5: 500 }; // extra purse for characters made from scratch above 1st level
+function kitTier(lvl) { return lvl >= 17 ? 17 : lvl >= 13 ? 13 : lvl >= 9 ? 9 : lvl >= 5 ? 5 : lvl >= 3 ? 3 : 0; }
+const KIT_GOLD = { 3: 150, 5: 500, 9: 2000, 13: 6000, 17: 12000 }; // extra purse for characters made from scratch above 1st level
 /* advance a character to the module's starting level and issue its kit.
    Pregenerated heroes are fully re-equipped; new recruits receive only the
    kit's magic and silver gear (and buy the rest themselves). */
@@ -111,12 +111,14 @@ function moduleCard(mid, opts) {
 function showCampaign() {
   while (modals.length) closeModal();
   showScreen('campaign');
-  let sel = (G && MODULES[G.module]) ? G.module : CAMPAIGN.order[0], src = 'new';
+  let sel = (G && MODULES[G.module]) ? G.module : CAMPAIGN.order[0], src = 'new', camp = campaignOf(sel);
   const saves = ['auto', '1', '2', '3'].map(s => ({ s, m: saveMeta(s) })).filter(o => o.m);
   function render() {
     const M = MODULES[sel];
-    $('#campSub').textContent = CAMPAIGN.name + ': four adventures that may be played alone or in order with the same company. Each varies in starting level, difficulty and size.';
-    const grid = h('div', { class: 'modgrid' }, CAMPAIGN.order.map(id => moduleCard(id, { on: id === sel, onclick: () => { sel = id; render(); } })));
+    $('#campSub').textContent = camp.sub;
+    // one tab for the hand-written saga and one for each band of levels
+    const tabs = h('div', { class: 'row wrap camptabs' }, CAMPAIGNS.map(c => h('button', { class: 'btn opt' + (c === camp ? ' on' : ''), text: c.name, onclick: () => { camp = c; if (!c.order.includes(sel)) sel = c.order[0]; render(); } })));
+    const grid = h('div', { class: 'modgrid' }, camp.order.map(id => moduleCard(id, { on: id === sel, done: !!(G && G.done && G.done.includes(id)), onclick: () => { sel = id; render(); } })));
     const party = h('div', { class: 'col' },
       h('h3', { text: 'Your company' }),
       h('div', { class: 'row wrap' },
@@ -125,7 +127,7 @@ function showCampaign() {
       h('div', { class: 'dimtxt', text: src === 'new'
         ? 'Six ready-made adventurers' + (M.lvl > 1 ? ' at level ' + M.lvl + ' with gear fit for the task' : '') + ' wait in the roster. Add them, or create your own.'
         : 'The whole roster, its gear and its gold come along. Anyone below level ' + M.lvl + ' is trained up to it before setting out. The saved game itself is not changed.' }));
-    $('#campBody').replaceChildren(grid, party);
+    $('#campBody').replaceChildren(tabs, grid, party);
     $('#campBtns').replaceChildren(
       h('button', { class: 'btn big', text: 'Back', onclick: showTitle }),
       h('button', { class: 'btn big primary', text: 'Assemble the Company', onclick: () => {
@@ -145,7 +147,7 @@ function moduleComplete() {
   jot('Adventure complete: ' + M.code + ': ' + M.name + '.', 'quest');
   saveGame('auto');
   const N = M.next && MODULES[M.next];
-  msgBox('Victory! ' + M.code + ': ' + M.name, M.victory + (N ? '' : '\n' + CAMPAIGN.name + ' is complete.'), 'Huzzah!').then(async () => {
+  msgBox('Victory! ' + M.code + ': ' + M.name, M.victory + (N ? '' : '\n' + (M.generated ? 'There is no higher road than this one.' : CAMPAIGN.name + ' is complete.')), 'Huzzah!').then(async () => {
     if (!N || G.done.includes(M.next)) return;
     const i = await choice('The Road Goes On', N.code + ': ' + N.name + ' (levels ' + N.levels[0] + '–' + N.levels[1] + ', ' + DIFFICULTY[N.diff].toLowerCase() + ', ' + N.size.toLowerCase() + ')\n' + N.blurb +
       '\nSet out now with your company? You can also leave later from the menu (Campaign).', [{ label: 'Set out', cls: 'primary' }, { label: 'Stay a while', cls: 'dim' }]);
@@ -172,11 +174,19 @@ function travelTo(mid) {
 function campaignDialog() {
   const body = h('div', { class: 'col' });
   const cur = G.module, curDone = G.done.includes(cur);
-  body.append(h('div', { class: 'dimtxt', text: CAMPAIGN.name + '. Party level ' + partyLevel(P()).toFixed(1) + ' · ' + G.gold + ' gp.' + (curDone ? ' This adventure is complete; the road is open.' : ' Leaving an adventure unfinished keeps your progress there; you may return to it later.') }));
-  for (const id of CAMPAIGN.order) {
+  let camp = campaignOf(cur);
+  const list = h('div', { class: 'col' });
+  const tabs = h('div', { class: 'row wrap camptabs' });
+  const fill = () => {
+    tabs.replaceChildren(...CAMPAIGNS.map(c => h('button', { class: 'btn opt' + (c === camp ? ' on' : ''), text: c.name, onclick: () => { camp = c; fill(); } })));
+    list.replaceChildren(...camp.order.map(row));
+  };
+  body.append(h('div', { class: 'dimtxt', text: 'Party level ' + partyLevel(P()).toFixed(1) + ' · ' + G.gold + ' gp.' + (curDone ? ' This adventure is complete; the road is open.' : ' Leaving an adventure unfinished keeps your progress there; you may return to it later.') }));
+  body.append(tabs, list);
+  function row(id) {
     const M = MODULES[id], done = G.done.includes(id), here = id === cur;
     const pl = partyLevel(P()), warn = pl > M.levels[1] + 1 ? 'Your company is past this challenge.' : pl < M.levels[0] - 0.5 ? 'Below level ' + M.lvl + ': your heroes will be trained up to it.' : '';
-    body.append(h('div', { class: 'camprow' + (here ? ' here' : '') },
+    return h('div', { class: 'camprow' + (here ? ' here' : '') },
       h('span', { class: 'modcode', text: M.code }),
       h('div', { class: 'pinfo' }, h('div', { class: 'pname', text: M.name }),
         h('div', { class: 'psub', text: 'Levels ' + M.levels[0] + '–' + M.levels[1] + ' · ' + DIFFICULTY[M.diff] + ' · ' + M.size + (done ? ' · completed' : here ? ' · in progress' : '') + (warn && !here ? ' · ' + warn : '') })),
@@ -184,7 +194,8 @@ function campaignDialog() {
         onclick: async () => {
           if (!curDone && (await choice('Leave ' + mod().name + '?', 'The work here is unfinished. Your progress will be kept if you return.', [{ label: 'Travel on', cls: 'primary' }, { label: 'Stay', cls: 'dim' }])) !== 0) return;
           travelTo(id);
-        } })));
+        } }));
   }
+  fill();
   modal({ title: 'Campaign', wide: true, body, buttons: [{ label: 'Close', cls: 'primary' }] });
 }
