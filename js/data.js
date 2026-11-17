@@ -3,7 +3,7 @@
    Game data: equipment, spells, monsters, maps, quests.
    ============================================================ */
 
-/* t: w=melee weapon, r=missile weapon, a=armor, s=shield, g=ring, p=potion, q=quest item
+/* t: w=melee weapon, r=missile weapon, a=armor, s=shield, g=ring, p=potion, q=quest item (treasure.js adds m, d, x, k, v)
    cls: classes allowed (F P R M C T). sp = speed factor. dmg / dmgL = damage vs S-M / L. */
 const ITEMS = {
   dagger:     { name: 'Dagger', t: 'w', dmg: '1d4', dmgL: '1d3', sp: 2, cost: 2, cls: 'FPRMT', dt: 'P' },
@@ -60,6 +60,8 @@ const ITEMS = {
 function item(id) {
   if (!id) return null;
   if (id.startsWith('scroll:')) { const s = SPELLS[id.slice(7)]; return { name: 'Scroll: ' + s.name, t: 'x', spell: id.slice(7), cost: 150 * s.l, magic: true }; }
+  const hash = id.indexOf('#'); // a device with charges: 'wandFire#12'
+  if (hash > 0) { const b = ITEMS[id.slice(0, hash)], n = +id.slice(hash + 1); return b ? Object.assign({}, b, { name: b.name + ' (' + n + (n === 1 ? ' charge)' : ' charges)'), left: n, cost: Math.max(50, Math.round(b.cost * Math.min(1, n / 15))) }) : null; }
   return ITEMS[id] || null;
 }
 const SPEC_WEAPONS = ['longsword', 'broadsword', 'battleaxe', 'twohander', 'halberd', 'mace', 'morningstar', 'shortsword', 'spear', 'flail'];

@@ -29,7 +29,9 @@ const Combat = (() => {
   const key = (x, y) => y * S.w + x;
   const inb = (x, y) => x >= 0 && y >= 0 && x < S.w && y < S.h;
   const alive = u => !u.gone && u.hp > 0;
-  const helpless = u => !!(u.eff.hold || u.eff.sleep);
+  const helpless = u => !!((u.eff.hold && !(u.pc && wornHas(u.ch, 'free'))) || u.eff.sleep); // free action shrugs off holding and stunning
+  const resists = (u, el) => !!el && u.pc && (wornHas(u.ch, 'resist', el) || (el === 'fire' && u.eff.resFire > 0));
+  const SPELL_EL = { fireball: 'fire', burningHands: 'fire', delayedBlast: 'fire', incendiaryCloud: 'fire', meteorSwarm: 'fire', flameStrike: 'fire', coneOfCold: 'cold', iceStorm: 'cold' };
   const canAct = u => alive(u) && !helpless(u) && !u.eff.nausea;
   const foesOf = u => S.units.filter(e => e.side !== u.side && alive(e));
   const hdOf = u => u.pc ? u.ch.lvl : u.m.hd;
@@ -43,6 +45,8 @@ const Combat = (() => {
   /* ---------------- setup ---------------- */
   function mkPC(ch, x, y) {
     const u = { pc: true, ch, name: ch.name, x, y, side: 0, eff: {}, fig: figForChar(ch), face: 1, images: 0 };
+    if (wornHas(ch, 'speed')) u.eff.haste = 999;  // boots of speed
+    if (wornHas(ch, 'invis')) u.hidden = true;    // ring of invisibility
     Object.defineProperty(u, 'hp', { get() { return ch.hp; }, set(v) { ch.hp = Math.max(-10, v); } });
     Object.defineProperty(u, 'maxhp', { get() { return ch.maxhp; } });
     return u;
@@ -331,12 +335,14 @@ const Combat = (() => {
     if (u.eff.shield) { const s = ranged ? 2 : 4; if (s < ac) ac = s; }
     if (u.armorSpell && ac > 6) ac = 6;
     if (u.eff.blind) ac += 4; // the blinded are easy to hit
+    if (u.eff.invuln) ac -= 2;
     return ac;
   }
   const thac0Of = u => u.pc ? charThac0(u.ch) : u.m.thac0;
   function saveNeed(u, type, opt) {
     let t = u.pc ? charSave(u.ch, type, opt) : saveBase('warrior', Math.floor(u.m.hd))[type];
     if (u.eff.protEvil) t -= 2;
+    if (u.eff.invuln) t -= 2;
     if (u.eff.aid) t -= 1;
     if (S.prayer[u.side]) t -= 1;
     if (S.prayer[1 - u.side]) t += 1;
@@ -383,6 +389,14 @@ const Combat = (() => {
         if (ch.race === 'elf' && ['longsword', 'shortsword'].includes(baseId(ch.eq.weapon))) hitB++;
       }
       if (!o.ranged && !t.pc) dmgB += foeDmg(ch, t.m.tags);
+      if (!o.off && !t.pc) { // what the weapon itself adds against this foe
+        const tg = t.m.tags; let ex = 0;
+        for (const k in w.vs || {}) if (tg.includes(k)) ex = Math.max(ex, w.vs[k]);
+        if (w.vsRegen && t.m.regen) ex = Math.max(ex, w.vsRegen);
+        hitB += ex; dmgB += ex;
+        if (w.pal && ch.cls === 'P') { hitB += w.pal.bonus - w.bonus; dmgB += w.pal.bonus - w.bonus + (tg.includes('evil') ? w.pal.evilDmg : 0); }
+        if (w.dwarf && ch.race === 'dwarf') { hitB += w.dwarf.bonus - w.bonus; dmgB += w.dwarf.bonus - w.bonus; }
+      }
       dmgSpec = (!t.pc && 'LHG'.includes(t.m.size)) ? w.dmgL : w.dmg; dt = w.dt;
     } else if (o.ranged) { dmgSpec = a.m.ranged.dmg; dt = 'B'; }
     else { dmgSpec = a.m.atk[o.i || 0]; dt = a.m.dt || 'S'; }
@@ -393,6 +407,7 @@ const Combat = (() => {
     if (S.prayer[a.side]) mods++;
     if (S.prayer[1 - a.side]) mods--;
     if (t.eff.protEvil && !a.pc && a.m.tags.includes('evil')) mods -= 2;
+    if (!a.pc && S.ward && S.ward[t.side] && a.m.tags.some(k => S.ward[t.side].includes(k))) mods -= 4; // a scroll of protection
     if (!a.pc && a.m.tags.includes('evil') && inAura(a)) mods -= 1; // a paladin's aura of protection
     if (o.ranged) {
       const rg = (a.pc ? w.range : a.m.ranged.range), d = edist(a, t);
@@ -437,6 +452,22 @@ const Combat = (() => {
     dmg += dmgB + (S.prayer[a.side] ? 1 : 0);
     dmg = Math.max(1, dmg);
     if (!t.pc && t.m.halfEdged && dt !== 'B') dmg = Math.max(1, dmg >> 1);
+    if (a.pc && w && !o.off && !t.pc && !auto) { // enchanted weapons with powers of their own
+      const tg = t.m.tags, shapeless = tg.includes('ooze') || tg.includes('elemental');
+      let mult = 1;
+      for (const k in w.mult || {}) if (tg.includes(k)) mult = Math.max(mult, w.mult[k]);
+      if (w.dwarf && a.ch.race === 'dwarf') for (const k in w.dwarf.mult || {}) if (tg.includes(k)) mult = Math.max(mult, w.dwarf.mult[k]);
+      if (w.critOn && roll >= w.critOn) mult = Math.max(mult, w.critMult || 2);
+      dmg *= mult;
+      if (w.extra) dmg += rollDice(w.extra);
+      let dead = null;
+      if (w.slayOn && roll >= w.slayOn && !shapeless) dead = '\'s head leaps from its shoulders';
+      else if (w.slaySave && roll >= w.slaySave && !isUndead(t) && !save(t, 4)) dead = '\'s life is drunk by the blade';
+      else if (w.venom && roll === 20 && !isUndead(t) && !tg.includes('construct') && !save(t, 0, { poison: true })) dead = ' stiffens as the venom reaches its heart';
+      else if (w.disrupt && isUndead(t)) { if (save(t, 4, { natural: true })) dmg *= 2; else dead = ' is blasted to dust by the mace'; }
+      if (dead) { log(a.name + how + t.name + ': HIT (' + detail + '). ' + t.name + dead + '!', 'good'); await slay(t); return; }
+      if (w.crit20 && roll === 20) { const n = rollDice(w.crit20); dmg += n; if (w.drainHeal) heal(a, n); }
+    }
     log(a.name + how + t.name + ': HIT for ' + dmg + (bs ? ' (x' + backstabMult(a.ch) + ' backstab)' : '') + ' (' + detail + ').', a.pc ? 'good' : 'bad');
     await hurt(t, dmg);
     if (alive(t) && !a.pc && t.pc) {
@@ -447,18 +478,20 @@ const Combat = (() => {
         const metal = id => id && /chain|splint|banded|plate|scale|ring|shield/.test(baseId(id)) && !(item(id).bonus > 0), slot = metal(t.ch.eq.shield) ? 'shield' : metal(t.ch.eq.armor) ? 'armor' : null;
         if (slot) { log(t.name + '\'s ' + item(t.ch.eq[slot]).name.toLowerCase() + ' crumbles into flakes of rust!', 'bad'); t.ch.eq[slot] = null; float(t, 'rust', '#c96a3a'); }
       }
-      for (let n = a.m.drain === true ? 1 : (a.m.drain || 0); n > 0 && !t.ch.dead; n--) {
+      if (a.m.drain && wornHas(t.ch, 'noDrain')) log(t.name + '\'s amulet flares; the draining touch finds no hold.', 'good');
+      else for (let n = a.m.drain === true ? 1 : (a.m.drain || 0); n > 0 && !t.ch.dead; n--) {
         const lived = drainLevel(t.ch);
         if (lived) { log('The touch of ' + a.name + ' drains a life level from ' + t.name + '! (now level ' + t.ch.lvl + ')', 'bad'); float(t, '-1 level', '#9fd4ff'); }
         else { log(t.name + ' is drained of the last spark of life!', 'bad'); t.eff = {}; float(t, 'drained', '#9fd4ff'); }
         UI.refreshParty();
       }
-      if (a.m.poison && !t.ch.poison && !save(t, 0, { poison: true, mod: a.m.poison.mod })) { t.ch.poison = { dmg: a.m.poison.dmg, at: G.time + 15 + rnd(15) }; log(t.name + ' is poisoned! The venom will strike within the half hour.', 'bad'); float(t, 'poisoned', '#9be36a'); }
+      if (a.m.poison && !t.ch.poison && !wornHas(t.ch, 'noPoison') && !save(t, 0, { poison: true, mod: a.m.poison.mod })) { t.ch.poison = { dmg: a.m.poison.dmg, at: G.time + 15 + rnd(15) }; log(t.name + ' is poisoned! The venom will strike within the half hour.', 'bad'); float(t, 'poisoned', '#9be36a'); }
     }
   }
   /* kill outright: a monster is slain, a character is beyond bandaging */
   async function slay(t, col) { await hurt(t, (t.pc ? t.hp + 10 : t.hp), col); }
   async function hurt(t, dmg, col) {
+    if (S.el && resists(t, S.el)) { dmg = Math.max(1, dmg >> 1); log(t.name + ' is warded against ' + S.el + ' and takes only ' + dmg + '.', 'dim'); }
     if (t.pc && t.ch.fx.armor > 0) { t.ch.fx.armor -= dmg; if (t.ch.fx.armor <= 0) { delete t.ch.fx.armor; log(t.name + '\'s Armor spell is exhausted.', 'dim'); } }
     t.hp -= dmg; t.hitRound = S.round; t.flash = performance.now();
     float(t, '-' + dmg, col || '#ff6b5e');
@@ -535,12 +568,17 @@ const Combat = (() => {
 
   /* ---------------- spells ---------------- */
   function unitsIn(cells) { const set = new Set(cells.map(([x, y]) => key(x, y))); return S.units.filter(u => alive(u) && set.has(key(u.x, u.y))); }
-  async function cast(u, id, t) {
-    const sp = SPELLS[id], L = u.pc ? casterLevel(u.ch) : lvlOf(u);
+  /* via: cast from a scroll or a device, at that item's level, with no chance of a priest's prayer failing */
+  async function cast(u, id, t, via) {
+    S.el = SPELL_EL[id] || null;
+    try { await castSpell(u, id, t, via); } finally { S.el = null; }
+  }
+  async function castSpell(u, id, t, via) {
+    const sp = SPELLS[id], L = via ? via.lvl : u.pc ? casterLevel(u.ch) : lvlOf(u);
     log(u.name + ' casts ' + sp.name + '!', 'spell');
     if (t && t !== u) faceTo(u, t);
     await burst(u.x, u.y, 0.2, '#9fd4ff', 300);
-    if (u.pc && u.ch.cls === 'C') { const f = clericFailure(u.ch.wis); if (f && rnd(100) <= f) { log('The prayer falters; the spell is lost.', 'bad'); return; } }
+    if (u.pc && !via && u.ch.cls === 'C') { const f = clericFailure(u.ch.wis); if (f && rnd(100) <= f) { log('The prayer falters; the spell is lost.', 'bad'); return; } }
     const allies = S.units.filter(a => a.side === u.side && alive(a));
     switch (id) {
       case 'magicMissile': {
@@ -861,6 +899,7 @@ const Combat = (() => {
       const t = foes.filter(e => edist(e, u) <= br.range + 0.5 && los(u, e)).sort((a, b) => br.r ? unitsIn(areaCells(b.x, b.y, br.r)).filter(v => v.side !== u.side).length - unitsIn(areaCells(a.x, a.y, br.r)).filter(v => v.side !== u.side).length : a.hp - b.hp)[0];
       if (t) {
         u.breathWait = br.every || 3; u.breaths = (u.breaths || 0) + 1; faceTo(u, t);
+        S.el = br.el || (/fire|flame/.test(br.text || '') ? 'fire' : /frost|freez|cold/.test(br.text || '') ? 'cold' : null);
         log(u.name + ' ' + (br.text || 'breathes fire') + ' at ' + t.name + '!', 'bad');
         await shot(u, t, br.color || '#ff7a2a');
         await burst(t.x, t.y, br.r || 0.45, br.color || '#ff7a2a', 420);
@@ -875,6 +914,7 @@ const Combat = (() => {
           log(v.name + (sv ? ' dodges partly aside and' : '') + ' takes ' + d + '.', 'bad');
           await hurt(v, d, br.color || '#ff7a2a');
         }
+        S.el = null;
         return;
       }
     }
@@ -949,9 +989,25 @@ const Combat = (() => {
     }
     if (m && m.t === 'items') {
       const seen = new Set();
-      ch.inv.forEach(id => { const it = item(id); if (it.t === 'p' && !seen.has(id)) { seen.add(id); list.push({ label: it.name, on: () => { S.mode = { t: 'target', kind: 'touch', item: id }; showCmds(); } }); } });
+      ch.inv.forEach(id => {
+        const it = item(id); if (seen.has(id) || !usable(ch, it)) return; seen.add(id);
+        if (it.t === 'p') list.push({ label: it.name, title: itemDesc(it), on: () => { S.mode = { t: 'target', kind: 'touch', item: id }; showCmds(); } });
+        else if (it.ward) list.push({ label: it.name, title: itemDesc(it), on: () => act(async () => {
+          consume(u, id); S.ward = S.ward || { 0: [], 1: [] }; S.ward[u.side].push(it.ward);
+          log(u.name + ' reads the ' + it.name + '. A circle of pale light springs up around the company.', 'spell'); await burst(u.x, u.y, 3, '#fff3b0', 600); u.acted = true; }) });
+        else if (it.t === 'x') list.push({ label: it.name, title: SPELLS[it.spell].desc, on: () => castVia(u, it.spell, id, Math.max(casterLevel(ch), SPELLS[it.spell].l * 2 - 1)) });
+        else if (it.wonder) list.push({ label: it.name, title: itemDesc(it), on: () => castVia(u, pick(it.spells), id, it.lvl) });
+        else if (it.spells.length === 1) list.push({ label: it.name, title: SPELLS[it.spells[0]].desc, on: () => castVia(u, it.spells[0], id, it.lvl) });
+        else list.push({ label: it.name, title: itemDesc(it), on: () => { S.mode = { t: 'device', item: id }; showCmds(); } });
+      });
       list.push({ label: 'Cancel', on: cancelMode, cls: 'dim' });
       return UI.cmds(list, 'Use which item?');
+    }
+    if (m && m.t === 'device') {
+      const it = item(m.item);
+      for (const s of it.spells.filter(s => !SPELLS[s].explore)) list.push({ label: SPELLS[s].name, title: SPELLS[s].desc, on: () => castVia(u, s, m.item, it.lvl) });
+      list.push({ label: 'Cancel', on: cancelMode, cls: 'dim' });
+      return UI.cmds(list, itemBaseName(m.item) + ': which power?');
     }
     if (m && m.t === 'target') {
       return UI.cmds([{ label: 'Cancel', key: 'Esc', on: cancelMode, cls: 'dim' }], m.kind === 'touch' ? 'Choose an adjacent ally (or yourself).' : 'Choose a target for ' + SPELLS[m.spell].name + '.');
@@ -967,7 +1023,7 @@ const Combat = (() => {
       if (rnd(100) <= thiefSkills(ch).hs) { u.hidden = true; log(u.name + ' melts into the shadows.', 'good'); } else log(u.name + ' fails to find cover.', 'dim');
       u.acted = true;
     }) });
-    if (ch.inv.some(id => item(id).t === 'p')) list.push({ icon: 'flask', label: 'Use Item', cap: 'Item', key: 'U', disabled: !fresh, on: () => { S.mode = { t: 'items' }; showCmds(); } });
+    if (ch.inv.some(id => usable(ch, item(id)))) list.push({ icon: 'flask', label: 'Use Item', cap: 'Item', key: 'U', disabled: !fresh, on: () => { S.mode = { t: 'items' }; showCmds(); } });
     const hurtAlly = S.units.find(a => a.pc && a !== u && !a.gone && a.hp <= 0 && !a.ch.dead && !a.stable && cheb(a, u) === 1);
     if (hurtAlly) list.push({ icon: 'plus', label: 'Bandage ' + hurtAlly.name.split(' ')[0], cap: 'Bandage', disabled: !fresh, on: () => act(async () => { hurtAlly.stable = true; log(u.name + ' binds ' + hurtAlly.name + '\'s wounds.', 'good'); u.acted = true; }) });
     if (u.x === 0 || u.y === 0 || u.x === S.w - 1 || u.y === S.h - 1) list.push({ icon: 'flee', label: 'Flee Battle', cap: 'Flee', cls: 'warn', on: () => act(async () => { u.gone = true; u.fledPC = true; log(u.name + ' flees the battle.', 'bad'); u.acted = true; }) });
@@ -977,6 +1033,40 @@ const Combat = (() => {
     UI.cmds(list, hint);
   }
   function cancelMode() { S.mode = { t: 'move' }; showCmds(); }
+  /* what a character can use from the pack in battle: potions, scrolls their class can read, wands and the like */
+  function usable(ch, it) {
+    if (!it) return false;
+    if (it.t === 'p') return true;
+    if (it.t === 'x') return it.ward ? true : SPELLS[it.spell].explore ? false : SPELLS[it.spell].c === 'M' ? ch.cls === 'M' : spellClass(ch) === 'C' || ch.cls === 'P';
+    if (it.t === 'd') return (!it.cls || it.cls.includes(ch.cls)) && it.spells.some(s => !SPELLS[s].explore);
+    return false;
+  }
+  /* use up a potion or scroll, or one charge of a device */
+  function consume(u, id) {
+    const inv = u.ch.inv, i = inv.indexOf(id), it = item(id);
+    if (i < 0) return;
+    if (it.t === 'd' && it.left > 1) inv[i] = itemBase(id) + '#' + (it.left - 1);
+    else { inv.splice(i, 1); if (it.t === 'd') log('The ' + itemBaseName(id) + ' is spent and crumbles to dust.', 'dim'); }
+  }
+  /* cast a spell out of a scroll or a device */
+  function castVia(u, spell, id, lvl) {
+    const sp = SPELLS[spell];
+    if (sp.tgt === 'self' || sp.tgt === 'party') return act(async () => { consume(u, id); await cast(u, spell, u, { lvl }); u.acted = true; });
+    S.mode = { t: 'target', spell, viaItem: id, lvl }; showCmds();
+  }
+  /* what a potion does to whoever drinks it */
+  function drink(t, it) {
+    if (it.heal) { const n = rollDice(it.heal); heal(t, n); log(t.name + ' drinks a ' + it.name + ' and recovers ' + n + '.', 'good'); }
+    else log(t.name + ' drinks a ' + it.name + '.', 'good');
+    if (it.cure === 'poison' && t.pc) { t.ch.poison = null; log('The poison in ' + t.name + '\'s blood is purged.', 'good'); }
+    if (it.cureAll) for (const k of ['blind', 'nausea']) delete t.eff[k];
+    for (const k in it.buff || {}) t.eff[k] = Math.max(t.eff[k] || 0, rollDice(it.buff[k]));
+    if (it.temp) { const n = rollDice(it.temp); t.hp = t.hp + n; float(t, '+' + n, '#7dff8a'); }
+    if (it.hide) { t.hidden = true; float(t, 'unseen', '#cfd6de'); }
+    if (it.giant && t.pc) { t.ch.fx.strength = { s: it.giant, x: 0, until: G.time + 60 }; float(t, 'strength', '#ffe37a'); }
+    if (it.buff) float(t, Object.keys(it.buff)[0] === 'haste' ? 'haste' : 'bolstered', '#ffe37a');
+    UI.refreshParty();
+  }
   function chooseSpell(u, id) {
     const sp = SPELLS[id];
     if (sp.tgt === 'self' || sp.tgt === 'party') return act(async () => { u.ch.mem[id]--; await cast(u, id, u); u.acted = true; });
@@ -1023,14 +1113,12 @@ const Combat = (() => {
       if (m.kind === 'touch') {
         return act(async () => {
           if (m.lay) { u.ch.layUsed = true; heal(t, u.ch.lvl * 2); log(u.name + ' lays hands on ' + t.name + ', healing ' + u.ch.lvl * 2 + '.', 'good'); }
-          else { const it = item(m.item); u.ch.inv.splice(u.ch.inv.indexOf(m.item), 1);
-            if (it.heal) { const n = rollDice(it.heal); heal(t, n); log(t.name + ' drinks a ' + it.name + ' and recovers ' + n + '.', 'good'); }
-            if (it.cure === 'poison') { t.ch.poison = null; log('The antivenom purges ' + t.name + '\'s blood.', 'good'); } }
+          else { const it = item(m.item); u.ch.inv.splice(u.ch.inv.indexOf(m.item), 1); drink(t, it); }
           u.acted = true; await sleep(250);
         });
       }
       const id = m.spell, sp = SPELLS[id];
-      return act(async () => { u.ch.mem[id]--; await cast(u, id, (sp.tgt === 'enemy' || sp.tgt === 'ally') ? t : p); u.acted = true; });
+      return act(async () => { if (m.viaItem) consume(u, m.viaItem); else u.ch.mem[id]--; await cast(u, id, (sp.tgt === 'enemy' || sp.tgt === 'ally') ? t : p, m.viaItem ? { lvl: m.lvl } : null); u.acted = true; });
     }
     if (m.t !== 'move') return;
     if (t && t.side !== u.side && alive(t)) return tryAttack(u, t);
@@ -1085,6 +1173,7 @@ const Combat = (() => {
     }
     for (const s of [0, 1]) if (S.prayer[s] && --S.prayer[s] <= 0) delete S.prayer[s];
     // trolls and their kind knit their wounds every round
+    for (const u of S.units) if (u.pc && alive(u) && u.hp < u.maxhp && wornSum(u.ch, 'regen')) { u.hp = Math.min(u.maxhp, u.hp + wornSum(u.ch, 'regen')); float(u, '+' + wornSum(u.ch, 'regen'), '#7dff8a'); }
     for (const u of S.units) if (!u.pc && alive(u) && u.m.regen && u.hp < u.maxhp) { const n = Math.min(u.m.regen, u.maxhp - u.hp); u.hp += n; float(u, '+' + n, '#7dff8a'); }
   }
   async function turn(u) {

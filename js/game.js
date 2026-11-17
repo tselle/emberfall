@@ -453,7 +453,7 @@ function campCures(spellsOnly) {
 /* what eight hours of undisturbed rest do */
 function campRest() {
   G.time += 480; G.march = 0;
-  for (const ch of P()) if (!ch.dead) { if (ch.hp < ch.maxhp) ch.hp = Math.max(0, ch.hp) + 1; memorizeAll(ch); ch.layUsed = false; }
+  for (const ch of P()) if (!ch.dead) { if (ch.hp < ch.maxhp) ch.hp = Math.min(ch.maxhp, Math.max(0, ch.hp) + 1 + (wornSum(ch, 'regen') ? 10 : 0)); memorizeAll(ch); ch.layUsed = false; }
   tickEffects();
 }
 function campReport(rests, cured, cut) {

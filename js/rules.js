@@ -74,6 +74,10 @@ const SPECIES_ENEMIES = { goblin: 'Goblins', orc: 'Orcs', kobold: 'Kobolds', und
 function effStr(ch) {
   let s = ch.str, x = ch.strx || 0;
   if (ch.fx && ch.fx.strength) { s = ch.fx.strength.s; x = ch.fx.strength.x; }
+  // worn magic: gauntlets and girdles set Strength outright, a few stones add to it
+  const lend = wornStr(ch), add = wornSum(ch, 'strAdd');
+  if (add && s < 18) s = Math.min(18, s + add);
+  if (lend && (lend[0] > s || (lend[0] === s && lend[1] > x))) { s = lend[0]; x = lend[1]; }
   return { s, x };
 }
 function strMods(ch) {
@@ -95,14 +99,15 @@ function strMods(ch) {
     if (x <= 99) return { hit: 2, dmg: 5, open: 15 };
     return { hit: 3, dmg: 6, open: 16 };
   }
-  return { hit: 3, dmg: 7, open: 16 };
+  // giant strength: 19 hill, 20 stone, 21 frost, 22 fire, 23 cloud, 24 storm
+  return [{ hit: 3, dmg: 7 }, { hit: 3, dmg: 8 }, { hit: 4, dmg: 9 }, { hit: 4, dmg: 10 }, { hit: 5, dmg: 11 }, { hit: 6, dmg: 12 }].map(o => Object.assign({ open: 16 }, o))[clamp(s, 19, 24) - 19];
 }
 function strText(ch) {
   const { s, x } = effStr(ch);
   return s === 18 && x ? '18/' + (x === 100 ? '00' : String(x).padStart(2, '0')) : String(s);
 }
 function dexMods(ch) {
-  const dx = clamp(ch.dex, 3, 19);
+  const dx = clamp(ch.dex + wornSum(ch, 'dexAdd'), 3, 19);
   const react = [0, 0, 0, -3, -2, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 3][dx];
   const def = [0, 0, 0, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, -1, -2, -3, -4, -4][dx];
   return { react, missile: react, def };
@@ -162,8 +167,7 @@ function charSave(ch, type, opt) {
   if (ch.cls === 'P') t -= 2;
   const hardy = ch.race === 'dwarf' || ch.race === 'gnome' || ch.race === 'halfling';
   if (hardy && (type === 1 || type === 4 || (opt.poison && ch.race !== 'gnome'))) t -= Math.floor(ch.con / 3.5);
-  const ring = item(ch.eq.ring);
-  if (ring && ring.prot) t -= ring.prot;
+  t -= wornSum(ch, 'prot') + wornSum(ch, 'saveBonus') + (wornHas(ch, 'displace') ? 2 : 0);
   if (opt.mental) t -= wisAdj(ch);
   return t;
 }
@@ -188,7 +192,10 @@ function casterLevel(ch) { return ch.cls === 'P' ? clamp(ch.lvl - 8, 1, 9) : ch.
 function topSpellLevel(c) { let m = 0; for (const id in SPELLS) if (SPELLS[id].c === c && SPELLS[id].l > m) m = SPELLS[id].l; return m; }
 function spellSlots(ch) {
   const L = clamp(ch.lvl, 1, MAX_LEVEL);
-  if (ch.cls === 'M') return MAGE_SLOTS[L - 1].slice(0, topSpellLevel('M'));
+  if (ch.cls === 'M') {
+    const dbl = new Set(); for (const it of wornItems(ch)) (it.wiz || []).forEach(l => dbl.add(l)); // rings of wizardry
+    return MAGE_SLOTS[L - 1].slice(0, topSpellLevel('M')).map((n, i) => dbl.has(i + 1) ? n * 2 : n);
+  }
   if (ch.cls === 'C') {
     const base = CLERIC_SLOTS[L - 1].slice(0, topSpellLevel('C')), b = wisBonusSpells(ch.wis);
     return base.map((n, i) => n + (b[i] || 0));
@@ -393,11 +400,11 @@ function meleeHalves(ch) {
 }
 function charAC(ch) {
   let ac = 10;
-  const a = item(ch.eq.armor), s = item(ch.eq.shield), r = item(ch.eq.ring), w = item(ch.eq.weapon);
+  const a = item(ch.eq.armor), s = item(ch.eq.shield), w = item(ch.eq.weapon);
   if (a) ac = a.ac - (a.bonus || 0);
   if (ch.fx && ch.fx.armor > 0 && ac > 6) ac = 6;
   if (s && !(w && w.hands === 2)) ac -= 1 + (s.bonus || 0);
-  if (r && r.prot) ac -= r.prot;
+  ac -= wornSum(ch, 'prot') + wornSum(ch, 'acBonus') + (wornHas(ch, 'displace') ? 2 : 0);
   return ac + dexMods(ch).def;
 }
 function moveRate(ch) { return RACES[ch.race].mv; }

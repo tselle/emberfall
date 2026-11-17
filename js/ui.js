@@ -179,19 +179,24 @@ function statusOf(ch) { return ch.dead ? 'Dead' : ch.hp <= 0 ? 'Unconscious' : c
 
 /* ---------------- equipment ---------------- */
 const SLOT = { w: 'weapon', r: 'ranged', a: 'armor', s: 'shield', g: 'ring' };
-const SLOT_NAMES = { weapon: 'Weapon', ranged: 'Missile', armor: 'Armor', shield: 'Shield', ring: 'Ring' };
+const SLOT_NAMES = { weapon: 'Weapon', ranged: 'Missile', armor: 'Armor', shield: 'Shield', ring: 'Ring', ring2: 'Ring', cloak: 'Cloak', boots: 'Boots', gloves: 'Gauntlets', belt: 'Girdle', neck: 'Neck', charm: 'Charm' };
 function itemDesc(it) {
-  if (it.t === 'w') return 'Dmg ' + it.dmg + ' / ' + it.dmgL + ' · speed ' + it.sp + (it.hands === 2 ? ' · two-handed' : '');
-  if (it.t === 'r') return 'Dmg ' + it.dmg + ' · ' + it.rof + '/round · range ' + it.range.map(r => r * 30).join('/') + ' ft';
-  if (it.t === 'a') return 'AC ' + (it.ac - (it.bonus || 0));
+  const note = it.note ? ' · ' + it.note : '';
+  if (it.t === 'w') return 'Dmg ' + it.dmg + ' / ' + it.dmgL + ' · speed ' + it.sp + (it.hands === 2 ? ' · two-handed' : '') + note;
+  if (it.t === 'r') return 'Dmg ' + it.dmg + ' · ' + it.rof + '/round · range ' + it.range.map(r => r * 30).join('/') + ' ft' + note;
+  if (it.t === 'a') return 'AC ' + (it.ac - (it.bonus || 0)) + note;
   if (it.t === 's') return 'AC bonus ' + (1 + (it.bonus || 0));
-  if (it.t === 'g') return 'AC and saves +' + it.prot;
-  if (it.t === 'p') return it.heal ? 'Heals ' + it.heal : 'Neutralizes poison';
-  if (it.t === 'x') return 'A mage may copy this spell into a spellbook';
+  if (it.t === 'g' || it.t === 'm') return it.prot ? 'AC and saves +' + it.prot : (it.note || 'Worn');
+  if (it.t === 'p') return it.heal ? 'Heals ' + it.heal : it.note || 'Neutralizes poison';
+  if (it.t === 'x') return it.ward ? 'Read in battle: creatures of that kind fight the whole company at -4 to hit' : 'Read in battle to cast ' + SPELLS[it.spell].name + ' once' + (SPELLS[it.spell].c === 'M' ? ', or a mage may copy it into a spellbook' : ' (priests and paladins)');
+  if (it.t === 'd') return 'Casts ' + it.spells.map(s => SPELLS[s].name).join(', ') + (it.wonder ? ' (at random)' : '') + (it.cls ? ' · ' + it.cls.split('').map(c => CLASSES[c].name).join(', ') + ' only' : '') + (it.note ? ' · ' + it.note : '');
+  if (it.t === 'k') return 'Read once: raises ' + ABIL_NAMES[it.abil] + ' by 1 for good';
+  if (it.t === 'v') return 'Worth ' + it.cost + ' gp to any merchant';
   return 'Quest item';
 }
+function itemBaseName(id) { return ITEMS[itemBase(id)] ? ITEMS[itemBase(id)].name : item(id).name; }
 function equip(ch, id) {
-  const it = item(id), slot = SLOT[it.t];
+  const it = item(id), slot = slotOf(ch, it);
   if (!slot) return 'That cannot be equipped.';
   if (!canUse(ch, it)) return CLASSES[ch.cls].name + 's cannot use that.';
   const w = item(ch.eq.weapon);
@@ -233,11 +238,31 @@ function showSheet(ch) {
   async function useItem(id) {
     const it = item(id);
     if (it.t === 'p') {
+      if (!it.heal && !it.cure && !it.giant) { msg = 'The ' + it.name + ' works for a short while only. Save it for battle (Use Item).'; return render(); }
       const t = await pickMember('Give the ' + it.name + ' to whom?', c => !c.dead);
       if (!t) return;
       ch.inv.splice(ch.inv.indexOf(id), 1);
       if (it.heal) { const n = rollDice(it.heal); t.hp = Math.min(t.maxhp, Math.max(0, t.hp) + n); msg = t.name + ' recovers ' + n + ' hit points.'; }
       if (it.cure === 'poison') { t.poison = null; msg = t.name + ' is cured of poison.'; }
+      if (it.giant) { t.fx.strength = { s: it.giant, x: 0, until: G.time + 60 }; msg = t.name + ' swells with a giant\'s strength (' + it.giant + ') for an hour.'; }
+    } else if (it.t === 'k') {
+      if (ch[it.abil] >= 18) { msg = ch.name + ' has nothing left to learn from the ' + it.name + '.'; return render(); }
+      ch.inv.splice(ch.inv.indexOf(id), 1);
+      ch[it.abil]++; if (it.abil === 'con') { /* hit points already rolled stand */ }
+      msg = ch.name + ' studies the ' + it.name + ' for a month of evenings. ' + ABIL_NAMES[it.abil] + ' rises to ' + ch[it.abil] + '. The book crumbles to dust.';
+    } else if (it.t === 'd') {
+      if (it.cls && !it.cls.includes(ch.cls)) { msg = CLASSES[ch.cls].name + 's cannot use the ' + itemBaseName(id) + '.'; return render(); }
+      const raise = it.spells.includes('resurrection');
+      let sp = it.spells[0];
+      if (it.spells.length > 1) { const i = await choice(itemBaseName(id), 'Which power?', it.spells.map(s => ({ label: SPELLS[s].name, title: SPELLS[s].desc })).concat([{ label: 'Cancel', cls: 'dim' }])); if (i >= it.spells.length) return; sp = it.spells[i]; }
+      const t = await pickMember(SPELLS[sp].name + ' on whom?', raise ? c => c.dead : c => !c.dead);
+      if (!t) return;
+      const idx = ch.inv.indexOf(id), left = it.left - 1;
+      if (left > 0) ch.inv[idx] = itemBase(id) + '#' + left; else ch.inv.splice(idx, 1);
+      if (sp === 'resurrection') { t.dead = false; t.lost = false; t.hp = t.maxhp; t.poison = null; msg = t.name + ' is restored to life, whole and strong.'; }
+      else if (CURES[sp]) { const n = healAmount(sp, t); t.hp = Math.min(t.maxhp, Math.max(0, t.hp) + n); msg = t.name + ' is healed for ' + n + ' hit points.'; }
+      else { t.poison = null; msg = 'The poison in ' + t.name + ' is destroyed.'; }
+      if (left <= 0) msg += ' The ' + itemBaseName(id) + ' is spent and crumbles.';
     } else if (it.t === 'x') {
       if (ch.cls !== 'M') { msg = 'Only a mage can make use of a spell scroll.'; return render(); }
       if (ch.book.includes(it.spell)) { msg = ch.name + ' already knows that spell.'; return render(); }
@@ -286,8 +311,8 @@ function showSheet(ch) {
     const invRows = ch.inv.map((id, idx) => { const it = item(id); return h('tr', null,
       h('td', { text: it.name, class: it.magic ? 'magic' : '', title: itemDesc(it) }), h('td', { class: 'note', text: itemDesc(it) }),
       h('td', { class: 'acts' },
-        SLOT[it.t] ? h('button', { class: 'btn mini', text: 'Equip', disabled: !canUse(ch, it), title: canUse(ch, it) ? '' : 'Not usable by this class', onclick: () => { msg = equip(ch, id) || ''; render(); } }) : null,
-        (it.t === 'p' || it.t === 'x') ? h('button', { class: 'btn mini', text: it.t === 'x' ? 'Learn' : 'Use', disabled: !alive, onclick: () => useItem(id) }) : null,
+        slotOf(ch, it) ? h('button', { class: 'btn mini', text: 'Equip', disabled: !canUse(ch, it), title: canUse(ch, it) ? '' : 'Not usable by this class', onclick: () => { msg = equip(ch, id) || ''; render(); } }) : null,
+        (it.t === 'p' || it.t === 'k' || (it.t === 'x' && it.spell && SPELLS[it.spell].c === 'M') || (it.t === 'd' && it.camp)) ? h('button', { class: 'btn mini', text: it.t === 'x' ? 'Learn' : it.t === 'k' ? 'Read' : 'Use', disabled: !alive || Combat.active, onclick: () => useItem(id) }) : null,
         others.length ? h('select', { class: 'mini', onchange: e => { const t = P().find(c => c.id === e.target.value); if (t) { ch.inv.splice(idx, 1); t.inv.push(id); msg = it.name + ' given to ' + t.name + '.'; render(); } } },
           h('option', { value: '', text: 'Give…' }), others.map(c => h('option', { value: c.id, text: c.name }))) : null,
         it.t !== 'q' ? h('button', { class: 'btn mini dim', text: 'Drop', title: 'Leave it on the ground here. It can be picked up again later.', onclick: () => { if (dropItem(ch, idx) != null) msg = it.name + ' dropped on the ground.'; render(); } }) : null)); });
@@ -438,15 +463,15 @@ function shopDialog(id) {
           h('td', { text: it.name }), h('td', { class: 'note', text: itemDesc(it) + (ok ? '' : ' · not usable') }), h('td', { class: 'num', text: it.cost + ' gp' }),
           h('td', null, h('button', { class: 'btn mini', text: 'Buy', disabled: G.gold < it.cost, onclick: () => {
             G.gold -= it.cost; buyer.inv.push(iid); msg = buyer.name + ' buys ' + it.name + '.';
-            const slot = SLOT[it.t];
+            const slot = slotOf(buyer, it);
             if (slot && ok && !buyer.eq[slot] && !equip(buyer, iid)) msg += ' Equipped.';
             render(); } }))); })))),
         h('div', { class: 'col' }, h('h3', { text: buyer.name + '\'s pack' }),
           h('div', { class: 'dimtxt', text: Object.keys(SLOT_NAMES).filter(s => buyer.eq[s]).map(s => item(buyer.eq[s]).name).join(', ') || 'Nothing equipped.' }),
-          buyer.inv.length ? h('table', { class: 'inv' }, buyer.inv.map((iid, idx) => { const it = item(iid), val = Math.floor(it.cost / 2); return h('tr', null,
+          buyer.inv.length ? h('table', { class: 'inv' }, buyer.inv.map((iid, idx) => { const it = item(iid), val = it.t === 'v' ? it.cost : Math.floor(it.cost / 2); return h('tr', null,
             h('td', { text: it.name, class: it.magic ? 'magic' : '' }),
             h('td', { class: 'acts' },
-              SLOT[it.t] && canUse(buyer, it) ? h('button', { class: 'btn mini', text: 'Equip', onclick: () => { msg = equip(buyer, iid) || it.name + ' equipped.'; render(); } }) : null,
+              slotOf(buyer, it) && canUse(buyer, it) ? h('button', { class: 'btn mini', text: 'Equip', onclick: () => { msg = equip(buyer, iid) || it.name + ' equipped.'; render(); } }) : null,
               it.t !== 'q' ? h('button', { class: 'btn mini', text: 'Sell ' + val + ' gp', onclick: () => { buyer.inv.splice(idx, 1); G.gold += val; msg = 'Sold ' + it.name + ' for ' + val + ' gp.'; render(); } }) : null)); }))
           : h('div', { class: 'dimtxt', text: 'Pack is empty.' }))));
   }
@@ -457,7 +482,7 @@ function restNight() {
   G.time += 1440 - (G.time % 1440) + 420; G.march = 0;
   for (const ch of P()) {
     if (ch.dead) continue;
-    ch.hp = Math.min(ch.maxhp, Math.max(0, ch.hp) + 3); ch.layUsed = false; ch.fx = {};
+    ch.hp = Math.min(ch.maxhp, Math.max(0, ch.hp) + 3 + (wornSum(ch, 'regen') ? 10 : 0)); ch.layUsed = false; ch.fx = {};
   }
   // clerics spend yesterday's remaining cures before re-memorizing
   campCures(true);
