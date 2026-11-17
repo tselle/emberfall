@@ -187,8 +187,15 @@ const Combat = (() => {
     }
     return out;
   }
-  function coneCells(u, t) {
+  function coneCells(u, t, len) {
     const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, out = [];
+    if (len > 1) { // a long cone: every open square within reach, inside the spread, that the caster can see
+      for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) {
+        const ex = x - u.x, ey = y - u.y, e = Math.hypot(ex, ey);
+        if (e && e <= len + 0.5 && (ex * dx + ey * dy) / (e * d) >= 0.86 && !S.grid[key(x, y)] && los(u, { x, y })) out.push([x, y]);
+      }
+      return out;
+    }
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
       if (!i && !j) continue;
       if ((i * dx + j * dy) / (Math.hypot(i, j) * d) >= 0.7 && inb(u.x + i, u.y + j)) out.push([u.x + i, u.y + j]);
@@ -276,7 +283,7 @@ const Combat = (() => {
     const top = sy - (u.fig.type ? 30 * US : 58 * s) - 6, k = clamp(u.hp / u.maxhp, 0, 1);
     c.fillStyle = 'rgba(0,0,0,.65)'; c.fillRect(sx - 17, top, 34, 5);
     c.fillStyle = k > 0.5 ? '#5fce6a' : k > 0.25 ? '#e3b23c' : '#e2493b'; c.fillRect(sx - 16, top + 1, 32 * k, 3);
-    let tag = u.eff.sleep ? 'Zzz' : u.eff.hold ? 'HELD' : u.eff.nausea ? 'SICK' : u.fleeing ? 'FLEE' : u.eff.haste ? 'HASTE' : '';
+    let tag = u.eff.sleep ? 'Zzz' : u.eff.hold ? 'HELD' : u.eff.nausea ? 'SICK' : u.eff.blind ? 'BLIND' : u.fleeing ? 'FLEE' : u.eff.haste ? 'HASTE' : '';
     if (tag) { c.font = 'bold 11px Verdana, sans-serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = '#000'; c.strokeText(tag, sx, top - 4); c.fillStyle = '#ffe9a8'; c.fillText(tag, sx, top - 4); }
   }
   function frame(now) { if (!S) return; draw(now); raf = requestAnimationFrame(frame); }
@@ -323,6 +330,7 @@ const Combat = (() => {
     let ac = u.pc ? charAC(u.ch) : u.m.ac;
     if (u.eff.shield) { const s = ranged ? 2 : 4; if (s < ac) ac = s; }
     if (u.armorSpell && ac > 6) ac = 6;
+    if (u.eff.blind) ac += 4; // the blinded are easy to hit
     return ac;
   }
   const thac0Of = u => u.pc ? charThac0(u.ch) : u.m.thac0;
@@ -378,6 +386,7 @@ const Combat = (() => {
     let mods = hitB;
     if (a.eff.bless) mods++;
     if (a.eff.aid) mods++;
+    if (a.eff.blind) mods -= 4;
     if (S.prayer[a.side]) mods++;
     if (S.prayer[1 - a.side]) mods--;
     if (t.eff.protEvil && !a.pc && a.m.tags.includes('evil')) mods -= 2;
@@ -416,6 +425,10 @@ const Combat = (() => {
       log(a.name + how + t.name + ', but the blow has no effect! (' + (t.m.hitBy === 'silver' ? 'silver or magic' : 'magic') + ' weapons are needed)', 'bad');
       float(t, 'no effect', '#c9c9c9'); await sleep(260); return;
     }
+    if (t.stoneskin > 0) {
+      t.stoneskin--; log(a.name + how + t.name + ', but the blow glances from skin of stone' + (t.stoneskin ? '' : '; the spell is spent') + '.', 'dim');
+      float(t, 'stoneskin', '#c9c9c9'); await sleep(240); return;
+    }
     let dmg = rollDice(dmgSpec);
     if (bs) dmg *= backstabMult(a.ch);
     dmg += dmgB + (S.prayer[a.side] ? 1 : 0);
@@ -435,6 +448,8 @@ const Combat = (() => {
       if (a.m.poison && !t.ch.poison && !save(t, 0, { poison: true, mod: a.m.poison.mod })) { t.ch.poison = { dmg: a.m.poison.dmg, at: G.time + 15 + rnd(15) }; log(t.name + ' is poisoned! The venom will strike within the half hour.', 'bad'); float(t, 'poisoned', '#9be36a'); }
     }
   }
+  /* kill outright: a monster is slain, a character is beyond bandaging */
+  async function slay(t, col) { await hurt(t, (t.pc ? t.hp + 10 : t.hp), col); }
   async function hurt(t, dmg, col) {
     if (t.pc && t.ch.fx.armor > 0) { t.ch.fx.armor -= dmg; if (t.ch.fx.armor <= 0) { delete t.ch.fx.armor; log(t.name + '\'s Armor spell is exhausted.', 'dim'); } }
     t.hp -= dmg; t.hitRound = S.round; t.flash = performance.now();
@@ -443,7 +458,7 @@ const Combat = (() => {
     if (t.hp <= 0) {
       if (t.pc) {
         if (t.hp <= -10) { t.ch.dead = true; log(t.name + ' is slain!', 'bad'); } else log(t.name + ' falls, gravely wounded!', 'bad');
-        t.eff = {}; t.images = 0; t.hidden = false; t.stable = false;
+        t.eff = {}; t.images = 0; t.stoneskin = 0; t.hidden = false; t.stable = false;
       } else {
         t.gone = true; t.dead = true; S.xp += t.m.xp; bestiarySlay(t.m.id);
         S.corpses.push({ x: t.x, y: t.y, fig: t.fig, t0: performance.now(), flip: t.face < 0 });
@@ -576,19 +591,116 @@ const Combat = (() => {
       case 'haste':
         allies.sort((a, b) => edist(a, u) - edist(b, u)).slice(0, L).forEach(a => { a.eff.haste = 3 + L; float(a, 'haste', '#ffe37a'); });
         log('The party blurs with unnatural speed.', 'good'); break;
-      case 'holdPerson': case 'holdPersonC': {
-        const max = id === 'holdPerson' ? rnd(4) : 3;
+      case 'holdPerson': case 'holdPersonC': case 'holdMonster': {
+        const max = id === 'holdPersonC' ? 3 : rnd(4), any = id === 'holdMonster';
         const vs = [t].concat(foesOf(u).filter(v => v !== t && edist(v, t) <= 2.3).sort((a, b) => edist(a, t) - edist(b, t))).slice(0, max);
         const mod = vs.length === 1 ? -2 : (vs.length === 2 && id === 'holdPersonC') ? -1 : 0;
         for (const v of vs) {
           await burst(v.x, v.y, 0.2, '#d7b3ff', 250);
-          if (!isPerson(v) || isUndead(v)) { log(v.name + ' is unaffected.', 'dim'); continue; }
+          if ((!any && !isPerson(v)) || isUndead(v)) { log(v.name + ' is unaffected.', 'dim'); continue; }
           if (save(v, 4, { mental: true, mod })) { log(v.name + ' resists the spell.', 'dim'); continue; }
-          v.eff.hold = 2 * L; float(v, 'held', '#d7b3ff'); log(v.name + ' is held rigid!', v.pc ? 'bad' : 'good');
+          v.eff.hold = any ? L : 2 * L; float(v, 'held', '#d7b3ff'); log(v.name + ' is held rigid!', v.pc ? 'bad' : 'good');
         }
         break;
       }
-      case 'cureLight': { const n = rnd(8); heal(t, n); log(t.name + ' is healed for ' + n + '.', 'good'); break; }
+      case 'cureLight': case 'cureSerious': case 'cureCritical': case 'heal': {
+        const n = healAmount(id, t); heal(t, n); log(t.name + ' is healed for ' + n + '.', 'good');
+        if (id === 'heal') { if (t.pc) t.ch.poison = null; for (const k of ['hold', 'nausea', 'blind']) delete t.eff[k]; t.paralyzed = false; }
+        break;
+      }
+      case 'neutralizePoison': if (t.pc) t.ch.poison = null; delete t.eff.nausea; float(t, 'cleansed', '#9be36a'); log('The poison in ' + t.name + ' is destroyed.', 'good'); break;
+      case 'protEvil10': allies.forEach(a => { a.eff.protEvil = 3 * L; float(a, 'warded', '#ffe37a'); }); log('The whole company is warded against evil.', 'good'); break;
+      case 'flameStrike': case 'bladeBarrier': case 'iceStorm': case 'delayedBlast': case 'incendiaryCloud': {
+        const K = { flameStrike: ['#ffd27a', 'is seared', 4], bladeBarrier: ['#d8dde6', 'is slashed', 4], iceStorm: ['#bfe6ff', 'is battered', -1], delayedBlast: ['#ff5a1a', 'is scorched', 4], incendiaryCloud: ['#ff7a2a', 'is burned', 4] }[id];
+        const dmg = id === 'flameStrike' ? dice(6, 8) : id === 'bladeBarrier' ? dice(8, 8) : id === 'iceStorm' ? dice(3, 10) : id === 'delayedBlast' ? dice(Math.min(L, 20), 6) + Math.min(L, 20) : dice(Math.min(2 * L, 40), 4);
+        if (id === 'delayedBlast' || id === 'incendiaryCloud') await shot(u, t, K[0]);
+        await burst(t.x, t.y, sp.r, K[0], 650);
+        for (const v of unitsIn(areaCells(t.x, t.y, sp.r))) { const sv = K[2] >= 0 && save(v, K[2]), d = Math.max(1, sv ? dmg >> 1 : dmg); log(v.name + (sv ? ' saves and' : '') + ' ' + K[1] + ' for ' + d + '.'); await hurt(v, d, K[0]); }
+        break;
+      }
+      case 'meteorSwarm': {
+        for (let i = 0; i < 4; i++) { await shot(u, { x: t.x + (i % 2 ? 1 : -1), y: t.y + (i > 1 ? 1 : -1) }, '#ff7a2a'); }
+        await burst(t.x, t.y, sp.r, '#ff5a1a', 800);
+        for (const v of unitsIn(areaCells(t.x, t.y, sp.r))) {
+          let d = 0; for (let i = 0; i < 4; i++) { const m = dice(10, 4); d += save(v, 4) ? m >> 1 : m; }
+          log(v.name + ' is blasted by the meteors for ' + d + '.'); await hurt(v, d, '#ff7a2a');
+        }
+        break;
+      }
+      case 'coneOfCold': {
+        const dmg = dice(L, 4) + L, cells = coneCells(u, t, sp.len);
+        await Promise.all(cells.map(([x, y]) => burst(x, y, 0.3, '#bfe6ff', 420)));
+        for (const v of unitsIn(cells)) { const sv = save(v, 4), d = Math.max(1, sv ? dmg >> 1 : dmg); log(v.name + (sv ? ' saves and' : '') + ' is frozen for ' + d + '.'); await hurt(v, d, '#bfe6ff'); }
+        break;
+      }
+      case 'cloudkill': {
+        await burst(t.x, t.y, sp.r, '#8fae3a', 700);
+        for (const v of unitsIn(areaCells(t.x, t.y, sp.r))) {
+          if (isUndead(v)) continue;
+          const hd = hdOf(v);
+          if (hd < 5 || (hd < 7 && !save(v, 0, { poison: true, mod: -4 }))) { log(v.name + ' chokes and dies in the yellow-green vapors.', v.side === u.side ? 'bad' : 'good'); await slay(v, '#8fae3a'); }
+          else { const d = rnd(10); log(v.name + ' is seared by the vapors for ' + d + '.'); await hurt(v, d, '#8fae3a'); }
+        }
+        break;
+      }
+      case 'chainLightning': {
+        let n = Math.min(L, 12), from = u, v = t; const struck = new Set();
+        while (v && n > 0) {
+          await bolt([[from.x, from.y], [v.x, v.y]], '#bfe6ff');
+          const dmg = dice(n, 6), sv = save(v, 4), d = Math.max(1, sv ? dmg >> 1 : dmg);
+          log(v.name + (sv ? ' saves and' : '') + ' is struck by the lightning for ' + d + '.'); await hurt(v, d, '#bfe6ff');
+          struck.add(v); from = v; n--;
+          const at = from; v = foesOf(u).filter(e => !struck.has(e) && edist(e, at) <= 6).sort((a, b) => edist(a, at) - edist(b, at))[0];
+        }
+        break;
+      }
+      case 'disintegrate':
+        await bolt([[u.x, u.y], [t.x, t.y]], '#7dff8a');
+        if (save(t, 4)) log(t.name + ' twists aside from the green ray.', 'dim');
+        else { log(t.name + ' crumbles into fine dust!', t.pc ? 'bad' : 'good'); await slay(t, '#7dff8a'); }
+        break;
+      case 'fingerOfDeath':
+        await shot(u, t, '#b48cff');
+        if (isUndead(t)) { log(t.name + ' is already dead; the spell finds nothing to take.', 'dim'); break; }
+        if (save(t, 0)) { const d = dice(2, 8) + 1; log(t.name + ' resists death itself but is wracked for ' + d + '.'); await hurt(t, d, '#b48cff'); }
+        else { log(t.name + '\'s heart stops at a word.', t.pc ? 'bad' : 'good'); await slay(t, '#b48cff'); }
+        break;
+      case 'powerWordKill':
+        await burst(t.x, t.y, 0.4, '#b48cff', 400);
+        if (t.hp > 60 || isUndead(t)) log(t.name + ' is too strong for the word to slay.', 'dim');
+        else { log(t.name + ' falls dead at a single word.', t.pc ? 'bad' : 'good'); await slay(t, '#b48cff'); }
+        break;
+      case 'powerWordStun': {
+        await burst(t.x, t.y, 0.4, '#d7b3ff', 400);
+        const r = t.hp <= 30 ? dice(4, 4) : t.hp <= 60 ? dice(2, 4) : t.hp <= 90 ? rnd(4) : 0;
+        if (!r) log(t.name + ' is too strong for the word to stun.', 'dim');
+        else { t.eff.hold = Math.max(t.eff.hold || 0, r); float(t, 'stunned', '#d7b3ff'); log(t.name + ' reels, stunned for ' + r + ' rounds.', t.pc ? 'bad' : 'good'); }
+        break;
+      }
+      case 'powerWordBlind': {
+        await burst(t.x, t.y, sp.r, '#ffffff', 450);
+        let pool = 100, n = 0;
+        for (const v of unitsIn(areaCells(t.x, t.y, sp.r)).filter(v => v.side !== u.side).sort((a, b) => a.hp - b.hp)) {
+          if (v.hp > pool) break;
+          pool -= v.hp; v.eff.blind = rnd(4) + 1; n++; float(v, 'blinded', '#fff'); log(v.name + ' is struck blind.', 'good');
+        }
+        if (!n) log('The word finds no one it can blind.', 'dim');
+        break;
+      }
+      case 'stoneskin': t.stoneskin = rnd(4) + Math.floor(L / 2); float(t, 'stoneskin', '#c9c9c9'); log(t.name + '\'s skin turns hard as granite (' + t.stoneskin + ' blows).', 'good'); break;
+      case 'holyWord': {
+        await burst(u.x, u.y, 3, '#fff3b0', 700);
+        let n = 0;
+        for (const v of foesOf(u).filter(v => edist(v, u) <= 3.5 && (v.pc || v.m.tags.includes('evil')))) {
+          const hd = hdOf(v); n++;
+          if (hd < 4) { log(v.name + ' is struck dead by the holy word.', 'good'); await slay(v, '#fff3b0'); }
+          else if (hd < 8) { v.eff.hold = Math.max(v.eff.hold || 0, dice(2, 4)); float(v, 'held', '#fff3b0'); log(v.name + ' is frozen where it stands.', 'good'); }
+          else if (hd < 12) { v.eff.hold = Math.max(v.eff.hold || 0, rnd(4)); float(v, 'stunned', '#fff3b0'); log(v.name + ' is stunned.', 'good'); }
+          else log(v.name + ' is shaken but stands.', 'dim');
+        }
+        if (!n) log('No evil stands near enough to hear.', 'dim');
+        break;
+      }
       case 'bless': allies.forEach(a => { a.eff.bless = 6; }); log('The party is blessed (+1 to hit).', 'good'); break;
       case 'protEvil': t.eff.protEvil = 3 * L; float(t, 'warded', '#ffe37a'); log(t.name + ' is warded against evil.', 'good'); break;
       case 'aid': { t.eff.aid = 1 + L; const n = rnd(8); t.hp = t.hp + n; float(t, '+' + n, '#7dff8a'); log(t.name + ' is bolstered (+1 to hit, +' + n + ' hp).', 'good'); UI.refreshParty(); break; }
@@ -606,10 +718,10 @@ const Combat = (() => {
       case 'dispelMagic': {
         await burst(t.x, t.y, sp.r, '#ffffff', 450);
         for (const v of unitsIn(areaCells(t.x, t.y, sp.r))) {
-          const ks = v.side === u.side ? ['hold', 'sleep', 'nausea', 'silence'] : ['bless', 'shield', 'haste', 'protEvil', 'aid'];
+          const ks = v.side === u.side ? ['hold', 'sleep', 'nausea', 'silence', 'blind'] : ['bless', 'shield', 'haste', 'protEvil', 'aid'];
           let any = false;
           for (const k of ks) if (v.eff[k] && !(k === 'hold' && v.paralyzed)) { delete v.eff[k]; any = true; }
-          if (v.side !== u.side && (v.images || v.armorSpell)) { v.images = 0; v.armorSpell = false; any = true; }
+          if (v.side !== u.side && (v.images || v.armorSpell || v.stoneskin)) { v.images = 0; v.armorSpell = false; v.stoneskin = 0; any = true; }
           if (any) { float(v, 'dispelled', '#fff'); log('Magic unravels around ' + v.name + '.', 'good'); }
         }
         break;
@@ -754,7 +866,7 @@ const Combat = (() => {
     const sp = m.spell && SPELLS[m.spell];
     if (!sp) return [[p.x, p.y]];
     if (sp.tgt === 'area') return areaCells(p.x, p.y, sp.r);
-    if (sp.tgt === 'cone') return coneCells(u, p);
+    if (sp.tgt === 'cone') return coneCells(u, p, sp.len);
     if (sp.tgt === 'line') return lineCells(u, p, sp.range);
     return [[p.x, p.y]];
   }
@@ -980,7 +1092,7 @@ const Combat = (() => {
       run();
     });
   }
-  return { start, onKey, get active() { return !!S; }, _state: () => S };
+  return { start, onKey, get active() { return !!S; }, _state: () => S, _cast: cast };
 })();
 
 /* Strength spell: 1 hour per caster level */

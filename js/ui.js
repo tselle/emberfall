@@ -211,12 +211,21 @@ function showSheet(ch) {
   const alive = ch.hp > 0 && !ch.dead;
   async function campCast(id) {
     const sp = SPELLS[id];
-    const t = await pickMember('Cast ' + sp.name + ' on whom?', c => !c.dead);
+    if (sp.corpse && !P().some(c => c.dead && (id === 'resurrection' || !c.lost))) { msg = 'There is no one here for ' + sp.name + ' to call back.'; return render(); }
+    const t = await pickMember('Cast ' + sp.name + ' on whom?', sp.corpse ? c => c.dead && (id === 'resurrection' || !c.lost) : c => !c.dead);
     if (!t) return;
     ch.mem[id]--;
+    const L = casterLevel(ch);
     if (ch.cls === 'C' && rnd(100) <= clericFailure(ch.wis)) { msg = 'The prayer falters; the spell is lost.'; return render(); }
-    if (id === 'cureLight') { const n = rnd(8); t.hp = Math.min(t.maxhp, Math.max(0, t.hp) + n); msg = t.name + ' is healed for ' + n + ' hit points.'; }
-    else if (id === 'armor') { t.fx.armor = 8 + ch.lvl; msg = t.name + ' is sheathed in a shimmering field (AC 6).'; }
+    if (CURES[id]) { const n = healAmount(id, t); t.hp = Math.min(t.maxhp, Math.max(0, t.hp) + n); if (id === 'heal') t.poison = null; msg = t.name + ' is healed for ' + n + ' hit points.'; }
+    else if (id === 'neutralizePoison') { t.poison = null; msg = 'The poison in ' + t.name + ' is destroyed.'; }
+    else if (id === 'raiseDead') {
+      const pct = resurrectionChance(t.con);
+      if (rnd(100) <= pct) { t.dead = false; t.hp = 1; t.con = Math.max(3, t.con - 1); t.poison = null; msg = t.name + ' gasps and opens their eyes. (Resurrection survival ' + pct + '%; Constitution reduced by 1.)'; }
+      else { t.lost = true; msg = 'The prayer echoes unanswered. ' + t.name + '\'s spirit does not return. (' + pct + '% chance)'; }
+    }
+    else if (id === 'resurrection') { t.dead = false; t.lost = false; t.hp = t.maxhp; t.poison = null; msg = t.name + ' is restored to life, whole and strong.'; }
+    else if (id === 'armor') { t.fx.armor = 8 + L; msg = t.name + ' is sheathed in a shimmering field (AC 6).'; }
     else if (id === 'strength') { applyStrength(t, ch.lvl); msg = t.name + '\'s Strength rises to ' + strText(t) + ' for ' + ch.lvl + ' hour(s).'; }
     else if (id === 'slowPoison') { t.poison = null; msg = 'The poison in ' + t.name + '\'s veins is stilled.'; }
     log(ch.name + ' casts ' + sp.name + '. ' + msg, 'spell'); render();
@@ -451,10 +460,7 @@ function restNight() {
     ch.hp = Math.min(ch.maxhp, Math.max(0, ch.hp) + 3); ch.layUsed = false; ch.fx = {};
   }
   // clerics spend yesterday's remaining cures before re-memorizing
-  for (const ch of P()) if (!ch.dead && ch.hp > 0) while (ch.mem.cureLight > 0) {
-    const t = P().filter(c => !c.dead && c.hp < c.maxhp).sort((a, b) => a.hp / a.maxhp - b.hp / b.maxhp)[0];
-    if (!t) break; ch.mem.cureLight--; t.hp = Math.min(t.maxhp, t.hp + rnd(8));
-  }
+  campCures(true);
   for (const ch of P()) if (!ch.dead) memorizeAll(ch);
   tickEffects(true);
 }

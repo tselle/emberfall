@@ -432,21 +432,21 @@ async function campChoice(text) {
   const i = await choice('Make Camp', text, opts);
   return opts[i] ? opts[i].id : null;
 }
-/* Before sleeping, the healers spend what sleep will bring back: clerics their remaining cures, paladins their
+/* Before sleeping, the healers spend what sleep will bring back: priests their remaining healing spells, paladins their
    laying on of hands, each on whoever is worst hurt. Returns the hit points restored. */
-function campCures() {
+function campCures(spellsOnly) {
   let total = 0;
   const worst = () => P().filter(c => !c.dead && c.hp < c.maxhp).sort((a, b) => a.hp / a.maxhp - b.hp / b.maxhp)[0];
   const mend = (t, n) => { const was = Math.max(0, t.hp); t.hp = Math.min(t.maxhp, was + n); total += t.hp - was; };
   for (const ch of P()) {
     if (ch.dead || ch.hp <= 0) continue;
-    while (ch.mem.cureLight > 0) {
+    for (const id in CURES) while (ch.mem[id] > 0) {
       const t = worst(); if (!t) break;
-      ch.mem.cureLight--;
+      ch.mem[id]--;
       if (ch.cls === 'C' && rnd(100) <= clericFailure(ch.wis)) continue; // the prayer falters
-      mend(t, rnd(8));
+      mend(t, healAmount(id, t));
     }
-    if (ch.cls === 'P' && !ch.layUsed) { const t = worst(); if (t) { ch.layUsed = true; mend(t, ch.lvl * 2); } }
+    if (!spellsOnly && ch.cls === 'P' && !ch.layUsed) { const t = worst(); if (t) { ch.layUsed = true; mend(t, ch.lvl * 2); } }
   }
   return total;
 }
