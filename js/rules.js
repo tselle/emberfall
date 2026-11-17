@@ -235,9 +235,14 @@ const TURN = {
   wight:    [20, 19, 16, 13, 10, 7, 4, 'T', 'T', 'D', 'D', 'D'],
   ghast:    [21, 20, 19, 16, 13, 10, 7, 4, 'T', 'T', 'D', 'D'],   // 21: cannot be turned at that level
   wraith:   [21, 21, 20, 19, 16, 13, 10, 7, 4, 'T', 'T', 'D'],
+  mummy:    [21, 21, 21, 20, 19, 16, 13, 10, 7, 4, 'T', 'T'],
+  spectre:  [21, 21, 21, 21, 20, 19, 16, 13, 10, 7, 4, 'T'],
+  vampire:  [21, 21, 21, 21, 21, 20, 19, 16, 13, 10, 7, 4],
+  ghost:    [21, 21, 21, 21, 21, 21, 20, 19, 16, 13, 10, 7],
+  lich:     [21, 21, 21, 21, 21, 21, 21, 20, 19, 16, 13, 10],
 };
 function turnCol(L) { return L <= 9 ? L - 1 : L <= 11 ? 9 : L <= 13 ? 10 : 11; }
-const TURN_ORDER = ['skeleton', 'zombie', 'ghoul', 'shadow', 'wight', 'ghast', 'wraith'];
+const TURN_ORDER = ['skeleton', 'zombie', 'ghoul', 'shadow', 'wight', 'ghast', 'wraith', 'mummy', 'spectre', 'vampire', 'ghost', 'lich'];
 function turnLevel(ch) { return ch.cls === 'C' ? ch.lvl : ch.cls === 'P' ? ch.lvl - 2 : 0; }
 
 /* ---- Thief skills (PHB Tables 26-28) ---- */

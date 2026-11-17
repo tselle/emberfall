@@ -69,16 +69,20 @@ function hdText(hd) {
 const SIZE_NAMES = { T: 'Tiny', S: 'Small', M: 'Man-sized', L: 'Large', H: 'Huge', G: 'Gargantuan' };
 function monKind(m) {
   const t = m.tags || [];
-  return t.includes('undead') ? 'Undead' : t.includes('animal') ? 'Beast' : t.includes('giant') || t.includes('troll') || t.includes('ogre') ? 'Giant-kin' : t.includes('human') ? 'Human' : t.includes('person') ? 'Humanoid' : 'Monster';
+  return t.includes('undead') ? 'Undead' : t.includes('dragon') ? 'Dragon' : t.includes('fiend') ? 'Fiend' : t.includes('construct') ? 'Construct' : t.includes('elemental') ? 'Elemental' : t.includes('ooze') ? 'Ooze' : t.includes('plant') ? 'Plant' : t.includes('lycanthrope') ? 'Shapechanger' : t.includes('animal') ? 'Beast' : t.includes('giant') || t.includes('troll') || t.includes('ogre') ? 'Giant-kin' : t.includes('human') ? 'Human' : t.includes('person') ? 'Humanoid' : 'Monster';
 }
 function monAbilities(m) {
   const a = [];
   if (m.ranged) a.push('Attacks from a distance for ' + m.ranged.dmg + ', out to ' + m.ranged.range[2] + ' squares.');
   if (m.spells) a.push('Casts spells: ' + [...new Set(m.spells)].map(s => (SPELLS[s] || {}).name || s).join(', ') + '.');
-  if (m.breath) a.push('Breath weapon: ' + m.breath.text + ' every ' + m.breath.every + ' rounds. A saving throw halves the damage.');
+  if (m.breath) a.push('Breath weapon: ' + m.breath.text + (m.breath.r ? ', catching everyone near its target,' : '') + ' every ' + m.breath.every + ' rounds' + (m.breath.uses ? ', ' + m.breath.uses + ' times a battle' : '') + '. ' + (m.breath.death ? 'A failed saving throw means death.' : m.breath.stone ? 'A failed saving throw means being turned to stone.' : m.breath.eff ? 'A saving throw resists it.' : 'A saving throw halves the ' + m.breath.dmg + ' damage.'));
+  if (m.gaze) a.push('Gaze: each round one foe who can see it must save or ' + (m.gaze.eff === 'stone' ? 'be turned to stone' : m.gaze.eff === 'death' ? 'die' : (m.gaze.fail || 'be overcome')) + '.');
+  if (m.petrify) a.push('Its touch turns the living to stone unless a saving throw is made.');
+  if (m.rust) a.push('Its touch rusts ordinary metal armor and shields to nothing.');
+  if (m.mr) a.push('Magic resistance ' + m.mr + '%: that often a spell slides off it as if it had saved.');
   if (m.poison) a.push('Venomous: a failed saving throw means ' + m.poison.dmg + ' damage when the venom takes hold. Antivenom cures it.');
   if (m.paralyze) a.push('Its touch paralyses' + (m.paralyze === 'all' ? ', and elves are not immune.' : '. Elves are immune.'));
-  if (m.drain) a.push('Its touch drains a level of experience.');
+  if (m.drain) a.push(m.drain > 1 ? 'Its touch drains ' + m.drain + ' levels of experience.' : 'Its touch drains a level of experience.');
   if (m.regen) a.push('Regenerates ' + m.regen + ' hit points every round.');
   if (m.hitBy) a.push(m.hitBy === 'silver' ? 'Harmed only by silver or magical weapons.' : 'Harmed only by magical weapons.');
   if (m.halfEdged) a.push('Edged and piercing weapons do half damage. Use blunt weapons.');
@@ -100,7 +104,7 @@ function encounterBody(text, mons) {
   String(text || '').split('\n').filter(Boolean).forEach(p => body.append(h('p', { text: p })));
   body.append(h('div', { class: 'encrow' }, mons.map(([id, n]) => {
     const m = MONSTERS[id], isNew = bestiarySee(id);
-    return h('div', { class: 'enccard', title: LORE[id] || '' },
+    return h('div', { class: 'enccard', title: LORE[id] || MONSTERS[id].lore || '' },
       monPortrait(id, 92),
       h('div', { class: 'encname', text: (n > 1 ? n + ' × ' : '') + m.name }),
       h('div', { class: 'enckind' }, monKind(m), isNew ? h('span', { class: 'encnew', text: 'New' }) : null));
@@ -124,7 +128,7 @@ function bestiaryDialog(showId) {
         h('div', null, h('h2', { text: m.name }),
           h('div', { class: 'sub', text: monKind(m) + ' · ' + (SIZE_NAMES[m.size] || 'Man-sized') }),
           h('div', { class: 'sub', text: 'First seen on day ' + (Math.floor(e.seen / 1440) + 1) + ' · fought ' + e.fought + (e.fought === 1 ? ' time' : ' times') + ' · ' + e.slain + ' slain' }))),
-      h('div', { class: 'msg', text: LORE[id] || 'Little is known of this creature.' })];
+      h('div', { class: 'msg', text: LORE[id] || m.lore || 'Little is known of this creature.' })];
     if (!e.fought) out.push(h('p', { class: 'jempty', text: 'You have seen this creature but never fought it. Its strengths and weaknesses are still unknown.' }));
     else {
       const ab = monAbilities(m);

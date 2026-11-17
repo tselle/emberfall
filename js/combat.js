@@ -342,7 +342,10 @@ const Combat = (() => {
     if (S.prayer[1 - u.side]) t += 1;
     return t - ((opt && opt.mod) || 0);
   }
-  function save(u, type, opt) { const r = rnd(20); return r === 20 || (r !== 1 && r >= saveNeed(u, type, opt)); }
+  function save(u, type, opt) {
+    if (!u.pc && u.m.mr && !(opt && opt.natural) && rnd(100) <= u.m.mr) return true; // magic resistance: the magic slides off as if it had saved
+    const r = rnd(20); return r === 20 || (r !== 1 && r >= saveNeed(u, type, opt));
+  }
   function moveSq(u) { const mv = u.pc ? moveRate(u.ch) : u.m.mv; return Math.ceil(mv / 2) * (u.eff.haste ? 2 : 1); }
   function hasRanged(u) { return u.pc ? !!rwpn(u.ch) : !!u.m.ranged; }
   function maxRange(u) { return (u.pc ? rwpn(u.ch).range : u.m.ranged.range)[2] * 3; }
@@ -380,7 +383,7 @@ const Combat = (() => {
         if (ch.race === 'elf' && ['longsword', 'shortsword'].includes(baseId(ch.eq.weapon))) hitB++;
       }
       if (!o.ranged && !t.pc) dmgB += foeDmg(ch, t.m.tags);
-      dmgSpec = (!t.pc && t.m.size === 'L') ? w.dmgL : w.dmg; dt = w.dt;
+      dmgSpec = (!t.pc && 'LHG'.includes(t.m.size)) ? w.dmgL : w.dmg; dt = w.dt;
     } else if (o.ranged) { dmgSpec = a.m.ranged.dmg; dt = 'B'; }
     else { dmgSpec = a.m.atk[o.i || 0]; dt = a.m.dt || 'S'; }
     let mods = hitB;
@@ -439,7 +442,12 @@ const Combat = (() => {
     if (alive(t) && !a.pc && t.pc) {
       // ghoul paralysis spares elves; ghasts and carrion crawlers do not
       if (a.m.paralyze && (a.m.paralyze === 'all' || t.ch.race !== 'elf') && !t.eff.hold && !save(t, 0)) { t.eff.hold = rollDice('1d6+2'); t.paralyzed = true; log(t.name + ' is paralyzed by the ' + a.m.name.toLowerCase() + '\'s touch!', 'bad'); float(t, 'paralyzed', '#d7b3ff'); }
-      if (a.m.drain && !t.ch.dead) {
+      if (a.m.petrify && !t.ch.dead && !save(t, 2)) { log(t.name + ' stiffens, greys, and is turned to stone!', 'bad'); float(t, 'stone', '#c9c9c9'); await slay(t, '#c9c9c9'); return; }
+      if (a.m.rust) {
+        const metal = id => id && /chain|splint|banded|plate|scale|ring|shield/.test(baseId(id)) && !(item(id).bonus > 0), slot = metal(t.ch.eq.shield) ? 'shield' : metal(t.ch.eq.armor) ? 'armor' : null;
+        if (slot) { log(t.name + '\'s ' + item(t.ch.eq[slot]).name.toLowerCase() + ' crumbles into flakes of rust!', 'bad'); t.ch.eq[slot] = null; float(t, 'rust', '#c96a3a'); }
+      }
+      for (let n = a.m.drain === true ? 1 : (a.m.drain || 0); n > 0 && !t.ch.dead; n--) {
         const lived = drainLevel(t.ch);
         if (lived) { log('The touch of ' + a.name + ' drains a life level from ' + t.name + '! (now level ' + t.ch.lvl + ')', 'bad'); float(t, '-1 level', '#9fd4ff'); }
         else { log(t.name + ' is drained of the last spark of life!', 'bad'); t.eff = {}; float(t, 'drained', '#9fd4ff'); }
@@ -798,7 +806,26 @@ const Combat = (() => {
       } else if (id === 'haste') {
         const allies = S.units.filter(a => a.side === u.side && canAct(a) && !a.eff.haste);
         if (allies.length >= 2 && S.round <= 3) return { id, t: u };
-      }
+      } else if (id === 'stoneskin') { if (!u.stoneskin) return { id, t: u }; }
+      else if (id === 'coneOfCold') {
+        let best = null, bn = 0.5;
+        for (const f of foes) { if (edist(u, f) > SPELLS[id].len + 0.5) continue; const p = { x: u.x + Math.sign(f.x - u.x), y: u.y + Math.sign(f.y - u.y) }, vs = unitsIn(coneCells(u, p, SPELLS[id].len)); const n = vs.filter(v => v.side !== u.side).length - vs.filter(v => v.side === u.side).length * 1.5; if (n > bn) { bn = n; best = p; } }
+        if (best) return { id, t: best };
+      } else if (SPELLS[id] && SPELLS[id].tgt === 'area') {
+        // any other area spell: the centre that catches the most foes and the fewest friends
+        const sp = SPELLS[id]; let best = null, bn = 0.5;
+        for (const f of foes) {
+          if (edist(u, f) > sp.range || !los(u, f)) continue;
+          const vs = unitsIn(areaCells(f.x, f.y, sp.r));
+          if (vs.includes(u)) continue;
+          const n = vs.filter(v => v.side !== u.side).length - vs.filter(v => v.side === u.side).length * 1.5;
+          if (n > bn) { bn = n; best = f; }
+        }
+        if (best) return { id, t: { x: best.x, y: best.y } };
+      } else if (SPELLS[id] && SPELLS[id].tgt === 'enemy') {
+        const sp = SPELLS[id], ts = foes.filter(f => canAct(f) && edist(u, f) <= sp.range && los(u, f) && !(id === 'powerWordKill' && f.hp > 60) && !(id === 'powerWordStun' && f.hp > 90));
+        if (ts.length) return { id, t: ts.sort((a, b) => b.hp - a.hp)[0] };
+      } else if (SPELLS[id] && SPELLS[id].tgt === 'party' && id !== 'holyWord') { if (S.round <= 2) return { id, t: u }; }
     }
     return null;
   }
@@ -813,18 +840,41 @@ const Combat = (() => {
     if (!foes.length) return;
     const sp = aiSpell(u, foes);
     if (sp) { u.spells.splice(u.spells.indexOf(sp.id), 1); await cast(u, sp.id, sp.t); return; }
+    // a gaze works on one foe who can see the creature, every round, besides whatever else it does
+    const gz = !u.pc && u.m.gaze;
+    if (gz && !u.eff.blind) {
+      const t = pick(foes.filter(e => canAct(e) && !e.eff.blind && edist(e, u) <= (gz.range || 6) + 0.5 && los(u, e)));
+      if (t) {
+        faceTo(u, t); log(u.name + ' ' + (gz.text || 'meets the eyes of') + ' ' + t.name + '.', 'bad');
+        await burst(t.x, t.y, 0.3, gz.color || '#b48cff', 300);
+        if (save(t, gz.save == null ? 2 : gz.save, { mental: gz.eff === 'hold' || gz.eff === 'nausea' })) log(t.name + ' looks away in time.', 'dim');
+        else if (gz.eff === 'stone') { log(t.name + ' is turned to stone!', 'bad'); float(t, 'stone', '#c9c9c9'); await slay(t, '#c9c9c9'); }
+        else if (gz.eff === 'death') { log(t.name + ' falls dead where they stand!', 'bad'); await slay(t, '#b48cff'); }
+        else { const r = rollDice(gz.rounds || '1d4+1'); t.eff[gz.eff] = Math.max(t.eff[gz.eff] || 0, r); float(t, gz.word || 'dazed', '#d7b3ff'); log(t.name + ' ' + (gz.fail || 'is overcome') + ' for ' + r + ' rounds.', 'bad'); }
+        foes = foesOf(u).filter(e => !e.hidden);
+        if (!foes.length || !canAct(u)) return;
+      }
+    }
     // breath weapons: used instead of attacking, then the creature must recover
     const br = !u.pc && u.m.breath;
-    if (br && !(u.breathWait > 0)) {
-      const t = foes.filter(e => edist(e, u) <= br.range + 0.5 && los(u, e)).sort((a, b) => a.hp - b.hp)[0];
+    if (br && !(u.breathWait > 0) && !(br.uses && u.breaths >= br.uses)) {
+      const t = foes.filter(e => edist(e, u) <= br.range + 0.5 && los(u, e)).sort((a, b) => br.r ? unitsIn(areaCells(b.x, b.y, br.r)).filter(v => v.side !== u.side).length - unitsIn(areaCells(a.x, a.y, br.r)).filter(v => v.side !== u.side).length : a.hp - b.hp)[0];
       if (t) {
-        u.breathWait = br.every || 3; faceTo(u, t);
+        u.breathWait = br.every || 3; u.breaths = (u.breaths || 0) + 1; faceTo(u, t);
         log(u.name + ' ' + (br.text || 'breathes fire') + ' at ' + t.name + '!', 'bad');
         await shot(u, t, br.color || '#ff7a2a');
-        await burst(t.x, t.y, 0.45, br.color || '#ff7a2a', 420);
-        const dmg = rollDice(br.dmg), sv = save(t, 3), d = Math.max(1, sv ? dmg >> 1 : dmg);
-        log(t.name + (sv ? ' dodges partly aside and' : '') + ' takes ' + d + '.', 'bad');
-        await hurt(t, d, br.color || '#ff7a2a');
+        await burst(t.x, t.y, br.r || 0.45, br.color || '#ff7a2a', 420);
+        // a wide breath catches everyone near the target, but not the creature's own side
+        const vs = br.r ? unitsIn(areaCells(t.x, t.y, br.r)).filter(v => v.side !== u.side) : [t], dmg = br.dmg ? rollDice(br.dmg) : 0;
+        for (const v of vs) {
+          const sv = save(v, br.save == null ? 3 : br.save);
+          if (br.death) { if (sv) log(v.name + ' endures the sound.', 'dim'); else { log(v.name + ' falls dead!', 'bad'); await slay(v, br.color || '#cfe6f2'); } continue; }
+          if (br.stone) { if (sv) log(v.name + ' turns away from the vapor in time.', 'dim'); else { log(v.name + ' is turned to stone!', 'bad'); float(v, 'stone', '#c9c9c9'); await slay(v, '#c9c9c9'); } continue; }
+          if (br.eff) { if (sv) log(v.name + ' resists.', 'dim'); else { const r = rollDice(br.rounds || '1d4+1'); v.eff[br.eff] = Math.max(v.eff[br.eff] || 0, r); float(v, br.word || 'overcome', '#d7b3ff'); log(v.name + ' ' + (br.fail || 'is overcome') + ' for ' + r + ' rounds.', 'bad'); } continue; }
+          const d = Math.max(1, sv ? dmg >> 1 : dmg);
+          log(v.name + (sv ? ' dodges partly aside and' : '') + ' takes ' + d + '.', 'bad');
+          await hurt(v, d, br.color || '#ff7a2a');
+        }
         return;
       }
     }
@@ -1020,7 +1070,7 @@ const Combat = (() => {
     for (const u of S.units) {
       if (!alive(u)) continue;
       if (!u.pc && u.m.slow) { u.init = 50 + Math.random(); continue; }
-      const mod = u.pc ? (wpn(u.ch).sp || 0) : { T: 0, S: 3, M: 3, L: 6 }[u.m.size];
+      const mod = u.pc ? (wpn(u.ch).sp || 0) : ({ T: 0, S: 3, M: 3, L: 6, H: 9, G: 12 }[u.m.size] || 3);
       u.init = rnd(10) + mod + (u.eff.haste ? -2 : 0) + Math.random() * 0.5;
     }
     S.order = S.units.filter(alive).sort((a, b) => a.init - b.init);
