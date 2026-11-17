@@ -513,7 +513,7 @@ const Combat = (() => {
   /* ---------------- spells ---------------- */
   function unitsIn(cells) { const set = new Set(cells.map(([x, y]) => key(x, y))); return S.units.filter(u => alive(u) && set.has(key(u.x, u.y))); }
   async function cast(u, id, t) {
-    const sp = SPELLS[id], L = lvlOf(u);
+    const sp = SPELLS[id], L = u.pc ? casterLevel(u.ch) : lvlOf(u);
     log(u.name + ' casts ' + sp.name + '!', 'spell');
     if (t && t !== u) faceTo(u, t);
     await burst(u.x, u.y, 0.2, '#9fd4ff', 300);
@@ -637,7 +637,7 @@ const Combat = (() => {
     const vs = foesOf(u).filter(isUndead).sort((a, b) => TURN_ORDER.indexOf(a.m.undead) - TURN_ORDER.indexOf(b.m.undead));
     for (const v of vs) {
       if (count <= 0) break;
-      const e = TURN[v.m.undead][Math.min(L, 9) - 1];
+      const e = TURN[v.m.undead][turnCol(L)];
       if (e == null || v.fleeing) continue;
       if (e === 'D') { count--; any = true; log(v.name + ' crumbles to dust!', 'good'); v.hp = 0; v.gone = true; v.dead = true; S.xp += v.m.xp; bestiarySlay(v.m.id); S.corpses.push({ x: v.x, y: v.y, fig: v.fig, t0: performance.now() }); }
       else if (e === 'T' || roll >= e) { count--; any = true; v.fleeing = true; float(v, 'turned', '#fff3b0'); log(v.name + ' recoils and flees.', 'good'); }

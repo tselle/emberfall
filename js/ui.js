@@ -257,7 +257,7 @@ function showSheet(ch) {
           h('tr', null, h('td', { text: 'Armor Class' }), h('td', { class: 'num', text: charAC(ch) })),
           h('tr', null, h('td', { text: 'THAC0' }), h('td', { class: 'num', text: charThac0(ch) })),
           h('tr', null, h('td', { text: 'Melee' }), h('td', { class: 'num', text: w.name + ' ' + w.dmg + (dmgB ? fmt(dmgB) : '') })),
-          h('tr', null, h('td', { text: 'To hit / attacks' }), h('td', { class: 'num', text: fmt(hitB) + ' · ' + (halves === 2 ? '1' : halves === 3 ? '3/2' : '2') + ' per round' + (spec ? ' (specialist)' : '') + (twoWeapon(ch) ? ' + off hand' : '') })),
+          h('tr', null, h('td', { text: 'To hit / attacks' }), h('td', { class: 'num', text: fmt(hitB) + ' · ' + halvesText(halves) + ' per round' + (spec ? ' (specialist)' : '') + (twoWeapon(ch) ? ' + off hand' : '') })),
           r ? h('tr', null, h('td', { text: 'Missile' }), h('td', { class: 'num', text: r.name.split(' &')[0] + ' ' + r.dmg + ' · ' + r.rof + '/rd' })) : null,
           h('tr', null, h('td', { text: 'Movement' }), h('td', { class: 'num', text: moveRate(ch) })))),
       h('div', { class: 'saves' }, h('b', { text: 'Saving throws  ' }), ['Para/Poison', 'Rod/Wand', 'Petrify', 'Breath', 'Spell'].map((n, i) => h('span', { title: SAVE_NAMES[i], text: n + ' ' + charSave(ch, i) }))),
@@ -451,7 +451,7 @@ function restNight() {
     ch.hp = Math.min(ch.maxhp, Math.max(0, ch.hp) + 3); ch.layUsed = false; ch.fx = {};
   }
   // clerics spend yesterday's remaining cures before re-memorizing
-  for (const ch of P()) if (ch.cls === 'C' && !ch.dead && ch.hp > 0) while (ch.mem.cureLight > 0) {
+  for (const ch of P()) if (!ch.dead && ch.hp > 0) while (ch.mem.cureLight > 0) {
     const t = P().filter(c => !c.dead && c.hp < c.maxhp).sort((a, b) => a.hp / a.maxhp - b.hp / b.maxhp)[0];
     if (!t) break; ch.mem.cureLight--; t.hp = Math.min(t.maxhp, t.hp + rnd(8));
   }

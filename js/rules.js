@@ -24,7 +24,7 @@ const ABILS = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 const ABIL_NAMES = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
 const ALIGNS = { LG: 'Lawful Good', NG: 'Neutral Good', CG: 'Chaotic Good', LN: 'Lawful Neutral', N: 'True Neutral', CN: 'Chaotic Neutral', LE: 'Lawful Evil', NE: 'Neutral Evil', CE: 'Chaotic Evil' };
 const SAVE_NAMES = ['Paralyzation / Poison / Death', 'Rod / Staff / Wand', 'Petrification / Polymorph', 'Breath Weapon', 'Spell'];
-const MAX_LEVEL = 8;
+const MAX_LEVEL = 20;
 
 /* ---- Races (PHB Table 7 minimums/maximums, Table 8 adjustments) ---- */
 const RACES = {
@@ -50,23 +50,23 @@ const RACES = {
 /* ---- Classes ---- */
 const CLASSES = {
   F: { name: 'Fighter', group: 'warrior', hd: 10, req: { str: 9 }, prime: ['str'], gold: '5d4',
-       xp: [0, 2000, 4000, 8000, 16000, 32000, 64000, 125000, 250000],
-       notes: 'Any weapon or armor. Weapon specialization: +1 to hit, +2 damage, 3 attacks per 2 rounds.' },
+       xp: [0, 2000, 4000, 8000, 16000, 32000, 64000, 125000, 250000, 500000, 750000, 1000000, 1250000, 1500000, 1750000, 2000000, 2250000, 2500000, 2750000, 3000000],
+       notes: 'Any weapon or armor. Weapon specialization: +1 to hit, +2 damage, and an extra attack every 2 rounds (3 per 2 rounds at 1st level, 2 a round at 7th, 5 per 2 at 13th).' },
   P: { name: 'Paladin', group: 'warrior', hd: 10, req: { str: 12, con: 9, wis: 13, cha: 17 }, prime: ['str', 'cha'], gold: '5d4', align: ['LG'],
-       xp: [0, 2250, 4500, 9000, 18000, 36000, 75000, 150000, 300000],
-       notes: 'Lawful good humans only. +2 to all saves, lay on hands (2 hp/level daily). Aura of protection: evil foes within one square suffer -1 to hit. Turns undead from 3rd level, as a cleric two levels lower.' },
+       xp: [0, 2250, 4500, 9000, 18000, 36000, 75000, 150000, 300000, 600000, 900000, 1200000, 1500000, 1800000, 2100000, 2400000, 2700000, 3000000, 3300000, 3600000],
+       notes: 'Lawful good humans only. +2 to all saves, lay on hands (2 hp/level daily). Aura of protection: evil foes within one square suffer -1 to hit. Turns undead from 3rd level, as a cleric two levels lower. Priest spells from 9th level.' },
   R: { name: 'Ranger', group: 'warrior', hd: 10, req: { str: 13, dex: 13, con: 14, wis: 14 }, prime: ['str', 'dex', 'wis'], gold: '5d4', align: ['LG', 'NG', 'CG'],
-       xp: [0, 2250, 4500, 9000, 18000, 36000, 75000, 150000, 300000],
+       xp: [0, 2250, 4500, 9000, 18000, 36000, 75000, 150000, 300000, 600000, 900000, 1200000, 1500000, 1800000, 2100000, 2400000, 2700000, 3000000, 3300000, 3600000],
        notes: 'Good alignment. Against a chosen species enemy: +4 to hit and +1 melee damage per level. In light armor, with a one-handed weapon and no shield, fights with a second blade: an extra off-hand attack each round.' },
   M: { name: 'Mage', group: 'wizard', hd: 4, req: { int: 9 }, prime: ['int'], gold: '1d4+1',
-       xp: [0, 2500, 5000, 10000, 20000, 40000, 60000, 90000, 135000],
+       xp: [0, 2500, 5000, 10000, 20000, 40000, 60000, 90000, 135000, 250000, 375000, 750000, 1125000, 1500000, 1875000, 2250000, 2625000, 3000000, 3375000, 3750000],
        notes: 'Wizard spells from a spellbook. No armor; dagger, staff, dart or sling only.' },
   C: { name: 'Cleric', group: 'priest', hd: 8, req: { wis: 9 }, prime: ['wis'], gold: '3d6',
-       xp: [0, 1500, 3000, 6000, 13000, 27500, 55000, 110000, 225000],
+       xp: [0, 1500, 3000, 6000, 13000, 27500, 55000, 110000, 225000, 450000, 675000, 900000, 1125000, 1350000, 1575000, 1800000, 2025000, 2250000, 2475000, 2700000],
        notes: 'Priest spells, turns undead. Any armor; blunt weapons only. High Wisdom grants bonus spells.' },
   T: { name: 'Thief', group: 'rogue', hd: 6, req: { dex: 9 }, prime: ['dex'], gold: '2d6', notAlign: ['LG'],
-       xp: [0, 1250, 2500, 5000, 10000, 20000, 40000, 70000, 110000],
-       notes: 'Backstab (+4 to hit, x2 damage), open locks, find/remove traps, hide in shadows. Leather armor only.' },
+       xp: [0, 1250, 2500, 5000, 10000, 20000, 40000, 70000, 110000, 160000, 220000, 440000, 660000, 880000, 1100000, 1320000, 1540000, 1760000, 1980000, 2200000],
+       notes: 'Backstab (+4 to hit, x2 damage, rising to x5 at 13th level), open locks, find/remove traps, hide in shadows. Leather armor only.' },
 };
 const SPECIES_ENEMIES = { goblin: 'Goblins', orc: 'Orcs', kobold: 'Kobolds', undead: 'Skeletons & Zombies', giantkin: 'Ogres & Gnolls' };
 
@@ -145,10 +145,11 @@ function charThac0(ch) {
   }
 }
 const SAVES = {
-  warrior: [[0, [16, 18, 17, 20, 19]], [2, [14, 16, 15, 17, 17]], [4, [13, 15, 14, 16, 16]], [6, [11, 13, 12, 13, 14]], [8, [10, 12, 11, 12, 13]], [10, [8, 10, 9, 9, 11]], [99, [7, 9, 8, 8, 10]]],
-  priest:  [[3, [10, 14, 13, 16, 15]], [6, [9, 13, 12, 15, 14]], [9, [7, 11, 10, 13, 12]], [99, [6, 10, 9, 12, 11]]],
-  rogue:   [[4, [13, 14, 12, 16, 15]], [8, [12, 12, 11, 15, 13]], [99, [11, 10, 10, 14, 11]]],
-  wizard:  [[5, [14, 11, 13, 15, 12]], [10, [13, 9, 11, 13, 10]], [99, [11, 7, 9, 11, 8]]],
+  warrior: [[0, [16, 18, 17, 20, 19]], [2, [14, 16, 15, 17, 17]], [4, [13, 15, 14, 16, 16]], [6, [11, 13, 12, 13, 14]], [8, [10, 12, 11, 12, 13]], [10, [8, 10, 9, 9, 11]], [12, [7, 9, 8, 8, 10]],
+            [14, [5, 7, 6, 5, 8]], [16, [4, 6, 5, 4, 7]], [99, [3, 5, 4, 4, 6]]],
+  priest:  [[3, [10, 14, 13, 16, 15]], [6, [9, 13, 12, 15, 14]], [9, [7, 11, 10, 13, 12]], [12, [6, 10, 9, 12, 11]], [15, [5, 9, 8, 11, 10]], [18, [4, 8, 7, 10, 9]], [99, [2, 6, 5, 8, 7]]],
+  rogue:   [[4, [13, 14, 12, 16, 15]], [8, [12, 12, 11, 15, 13]], [12, [11, 10, 10, 14, 11]], [16, [10, 8, 9, 13, 9]], [20, [9, 6, 8, 12, 7]], [99, [8, 4, 7, 11, 5]]],
+  wizard:  [[5, [14, 11, 13, 15, 12]], [10, [13, 9, 11, 13, 10]], [15, [11, 7, 9, 11, 8]], [20, [10, 5, 7, 9, 6]], [99, [8, 3, 5, 7, 4]]],
 };
 function saveBase(group, lvl) {
   for (const [max, row] of SAVES[group]) if (lvl <= max) return row;
@@ -166,20 +167,39 @@ function charSave(ch, type, opt) {
   if (opt.mental) t -= wisAdj(ch);
   return t;
 }
-const MAGE_SLOTS = [[1], [2], [2, 1], [3, 2], [4, 2, 1], [4, 2, 2], [4, 3, 2, 1], [4, 3, 3, 2], [4, 3, 3, 2, 1]];
-const CLERIC_SLOTS = [[1], [2], [2, 1], [3, 2], [3, 3, 1], [3, 3, 2], [3, 3, 2, 1], [3, 3, 3, 2], [4, 4, 3, 2, 1]];
+/* Spells memorized per spell level, by character level 1-20 (PHB Tables 21 and 24; paladins Table 17, from 9th level) */
+const MAGE_SLOTS = [[1], [2], [2, 1], [3, 2], [4, 2, 1], [4, 2, 2], [4, 3, 2, 1], [4, 3, 3, 2], [4, 3, 3, 2, 1], [4, 4, 3, 2, 2],
+  [4, 4, 4, 3, 3], [4, 4, 4, 4, 4, 1], [5, 5, 5, 4, 4, 2], [5, 5, 5, 4, 4, 2, 1], [5, 5, 5, 5, 5, 2, 1], [5, 5, 5, 5, 5, 3, 2, 1],
+  [5, 5, 5, 5, 5, 3, 3, 2], [5, 5, 5, 5, 5, 3, 3, 2, 1], [5, 5, 5, 5, 5, 3, 3, 3, 1], [5, 5, 5, 5, 5, 4, 3, 3, 2]];
+const CLERIC_SLOTS = [[1], [2], [2, 1], [3, 2], [3, 3, 1], [3, 3, 2], [3, 3, 2, 1], [3, 3, 3, 2], [4, 4, 3, 2, 1], [4, 4, 3, 3, 2],
+  [5, 4, 4, 3, 2, 1], [6, 5, 5, 3, 2, 2], [6, 6, 6, 4, 2, 2], [6, 6, 6, 5, 3, 2, 1], [6, 6, 6, 6, 4, 2, 1], [7, 7, 7, 6, 4, 3, 1],
+  [7, 7, 7, 7, 5, 3, 2], [8, 8, 8, 8, 6, 4, 2], [9, 9, 8, 8, 6, 4, 2], [9, 9, 9, 8, 7, 5, 2]];
+const PALADIN_SLOTS = { 9: [1], 10: [2], 11: [2, 1], 12: [2, 2], 13: [2, 2, 1], 14: [3, 2, 1], 15: [3, 2, 1, 1], 16: [3, 3, 2, 1], 17: [3, 3, 3, 1], 18: [3, 3, 3, 1], 19: [3, 3, 3, 2], 20: [3, 3, 3, 3] };
+/* the priest spells a paladin may pray for: those of combat, healing and protection */
+const PALADIN_SPELLS = ['cureLight', 'bless', 'protEvil', 'aid', 'slowPoison', 'prayer', 'dispelMagic', 'removeParalysis'];
+/* which spell list a character casts from: 'M' wizard, 'C' priest, or null */
+function spellClass(ch) { return ch.cls === 'M' ? 'M' : ch.cls === 'C' || (ch.cls === 'P' && ch.lvl >= 9) ? 'C' : null; }
+/* the level a character's spells are cast at; a paladin's begin at 1st when he reaches 9th level, and stop at 9th */
+function casterLevel(ch) { return ch.cls === 'P' ? clamp(ch.lvl - 8, 1, 9) : ch.lvl; }
+/* the highest spell level there are spells of, for a spell list: slots above it would have nothing to hold */
+function topSpellLevel(c) { let m = 0; for (const id in SPELLS) if (SPELLS[id].c === c && SPELLS[id].l > m) m = SPELLS[id].l; return m; }
 function spellSlots(ch) {
-  if (ch.cls === 'M') return MAGE_SLOTS[ch.lvl - 1].slice(0, 3);
+  const L = clamp(ch.lvl, 1, MAX_LEVEL);
+  if (ch.cls === 'M') return MAGE_SLOTS[L - 1].slice(0, topSpellLevel('M'));
   if (ch.cls === 'C') {
-    const base = CLERIC_SLOTS[ch.lvl - 1].slice(0, 3), b = wisBonusSpells(ch.wis);
+    const base = CLERIC_SLOTS[L - 1].slice(0, topSpellLevel('C')), b = wisBonusSpells(ch.wis);
     return base.map((n, i) => n + (b[i] || 0));
   }
+  if (ch.cls === 'P') return (PALADIN_SLOTS[L] || []).slice(0, topSpellLevel('C'));
   return [];
 }
-function isCaster(ch) { return ch.cls === 'M' || ch.cls === 'C'; }
+function isCaster(ch) { return !!spellClass(ch); }
 function knownSpells(ch) {
   if (ch.cls === 'M') return ch.book.slice();
-  if (ch.cls === 'C') { const max = spellSlots(ch).length; return Object.keys(SPELLS).filter(id => SPELLS[id].c === 'C' && SPELLS[id].l <= max); }
+  if (spellClass(ch) === 'C') {
+    const max = spellSlots(ch).length;
+    return Object.keys(SPELLS).filter(id => SPELLS[id].c === 'C' && SPELLS[id].l <= max && (ch.cls !== 'P' || PALADIN_SPELLS.includes(id)));
+  }
   return [];
 }
 const PREP_PRIORITY = {
@@ -192,7 +212,7 @@ function autoPrep(ch) {
   if (!isCaster(ch)) return;
   const slots = spellSlots(ch), known = knownSpells(ch);
   slots.forEach((n, i) => {
-    const pri = PREP_PRIORITY[ch.cls][i].filter(id => known.includes(id));
+    const pri = (PREP_PRIORITY[spellClass(ch)][i] || []).filter(id => known.includes(id));
     let k = prepCount(ch, i + 1), guard = 0;
     while (pri.length && prepCount(ch, i + 1) < n && guard++ < 20) { const id = pri[k++ % pri.length]; ch.prep[id] = (ch.prep[id] || 0) + 1; }
   });
@@ -201,14 +221,16 @@ function memorizeAll(ch) { if (isCaster(ch)) ch.mem = Object.assign({}, ch.prep)
 
 /* ---- Turning undead (PHB Table 61) ---- */
 const TURN = {
-  skeleton: [10, 7, 4, 'T', 'T', 'D', 'D', 'D', 'D'],
-  zombie:   [13, 10, 7, 4, 'T', 'T', 'D', 'D', 'D'],
-  ghoul:    [16, 13, 10, 7, 4, 'T', 'T', 'D', 'D'],
-  shadow:   [19, 16, 13, 10, 7, 4, 'T', 'T', 'D'],
-  wight:    [20, 19, 16, 13, 10, 7, 4, 'T', 'T'],
-  ghast:    [21, 20, 19, 16, 13, 10, 7, 4, 'T'],   // 21: cannot be turned at that level
-  wraith:   [21, 21, 20, 19, 16, 13, 10, 7, 4],
+  // columns: priest levels 1 to 9, then 10-11, 12-13 and 14 or more (see turnCol)
+  skeleton: [10, 7, 4, 'T', 'T', 'D', 'D', 'D', 'D', 'D', 'D', 'D'],
+  zombie:   [13, 10, 7, 4, 'T', 'T', 'D', 'D', 'D', 'D', 'D', 'D'],
+  ghoul:    [16, 13, 10, 7, 4, 'T', 'T', 'D', 'D', 'D', 'D', 'D'],
+  shadow:   [19, 16, 13, 10, 7, 4, 'T', 'T', 'D', 'D', 'D', 'D'],
+  wight:    [20, 19, 16, 13, 10, 7, 4, 'T', 'T', 'D', 'D', 'D'],
+  ghast:    [21, 20, 19, 16, 13, 10, 7, 4, 'T', 'T', 'D', 'D'],   // 21: cannot be turned at that level
+  wraith:   [21, 21, 20, 19, 16, 13, 10, 7, 4, 'T', 'T', 'D'],
 };
+function turnCol(L) { return L <= 9 ? L - 1 : L <= 11 ? 9 : L <= 13 ? 10 : 11; }
 const TURN_ORDER = ['skeleton', 'zombie', 'ghoul', 'shadow', 'wight', 'ghast', 'wraith'];
 function turnLevel(ch) { return ch.cls === 'C' ? ch.lvl : ch.cls === 'P' ? ch.lvl - 2 : 0; }
 
@@ -225,7 +247,7 @@ function thiefSkills(ch) {
   for (const k in t) t[k] = clamp(t[k], 1, 95);
   return t;
 }
-function backstabMult(ch) { return ch.lvl <= 4 ? 2 : ch.lvl <= 8 ? 3 : 4; }
+function backstabMult(ch) { return ch.lvl <= 4 ? 2 : ch.lvl <= 8 ? 3 : ch.lvl <= 12 ? 4 : 5; }
 
 /* ---- Character generation ---- */
 function meetsReq(stats, race, cls) {
@@ -284,10 +306,12 @@ function awardXP(ch, amt) {
   return amt;
 }
 function canLevel(ch) { return !ch.dead && ch.lvl < MAX_LEVEL && ch.xp >= xpForNext(ch); }
+/* Hit dice are rolled up to HD_LEVELS; beyond it each level brings a fixed HP_AFTER, with no Constitution bonus (PHB) */
+const HD_LEVELS = { warrior: 9, priest: 9, rogue: 10, wizard: 10 }, HP_AFTER = { warrior: 3, priest: 2, rogue: 2, wizard: 1 };
 function levelUp(ch) {
-  const before = spellSlots(ch).length;
+  const before = spellSlots(ch).length, g = CLASSES[ch.cls].group;
   ch.lvl++;
-  const gain = Math.max(1, rnd(CLASSES[ch.cls].hd) + conHp(ch));
+  const gain = ch.lvl > HD_LEVELS[g] ? HP_AFTER[g] : Math.max(1, rnd(CLASSES[ch.cls].hd) + conHp(ch));
   ch.maxhp += gain; ch.hp += gain;
   autoPrep(ch);
   return { hp: gain, newSpellLevel: spellSlots(ch).length > before };
@@ -303,7 +327,8 @@ function trimPrep(ch) {
 /* level drain (wights and worse): lose a level and its hit points; a 1st-level victim dies */
 function drainLevel(ch) {
   if (ch.lvl <= 1) { ch.dead = true; ch.hp = -10; return false; }
-  const per = Math.max(1, Math.round((ch.maxhp - CLASSES[ch.cls].hd) / (ch.lvl - 1)));
+  const g = CLASSES[ch.cls].group, top = HD_LEVELS[g], fixed = Math.max(0, ch.lvl - top) * HP_AFTER[g];
+  const per = ch.lvl > top ? HP_AFTER[g] : Math.max(1, Math.round((ch.maxhp - fixed - CLASSES[ch.cls].hd) / (ch.lvl - 1)));
   ch.lvl--; ch.maxhp = Math.max(1, ch.maxhp - per); ch.hp = Math.min(ch.hp, ch.maxhp);
   const xp = CLASSES[ch.cls].xp; ch.xp = Math.floor((xp[ch.lvl - 1] + xp[ch.lvl]) / 2);
   trimPrep(ch);
@@ -331,7 +356,8 @@ function canUse(ch, it) { return !!it && (!it.cls || it.cls.includes(ch.cls)); }
 const FIST = { name: 'Fist', t: 'w', dmg: '1d2', dmgL: '1d2', sp: 0, dt: 'B', bonus: 0 };
 function wpn(ch) { return item(ch.eq.weapon) || FIST; }
 function rwpn(ch) { return item(ch.eq.ranged); }
-/* attacks per round expressed in halves: 2 = 1/round, 3 = 3/2, 4 = 2/round */
+/* attacks per round expressed in halves: 2 = 1/round, 3 = 3/2, 4 = 2/round, 5 = 5/2 */
+function halvesText(h) { return h % 2 ? h + '/2' : String(h / 2); }
 function atkHalves(ch, ranged) {
   if (ranged) { const r = rwpn(ch); return r ? r.rof * 2 : 0; }
   return meleeHalves(ch);
@@ -349,7 +375,7 @@ function twoWeapon(ch) {
 function foeDmg(ch, tags) { return ch.cls === 'R' && ch.foe && tags.includes(ch.foe) ? ch.lvl : 0; }
 function meleeHalves(ch) {
   let h = 2;
-  if (CLASSES[ch.cls].group === 'warrior' && ch.lvl >= 7) h = 3;
+  if (CLASSES[ch.cls].group === 'warrior') h = ch.lvl >= 13 ? 4 : ch.lvl >= 7 ? 3 : 2;
   if (isSpecialized(ch, ch.eq.weapon)) h += 1;
   return h;
 }
