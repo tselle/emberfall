@@ -57,7 +57,7 @@ const Combat = (() => {
              fig: Object.assign({ ph: Math.random() * 6 }, m.fig), spells: m.spells ? m.spells.slice() : null };
   }
   function setup(spec) {
-    S = { w: 14, h: 10, units: [], fx: [], corpses: [], round: 0, cur: null, mode: null, busy: false, auto: false, xp: 0, prayer: {},
+    S = { w: 14, h: 10, units: [], fx: [], corpses: [], clouds: [], round: 0, cur: null, mode: null, busy: false, auto: false, xp: 0, prayer: {},
           theme: THEMES[spec.arena] || THEMES.dungeon, hover: null, reach: null, order: [], done: false, surprise: spec.surprise || null, night: !!spec.night };
     S.grid = new Uint8Array(S.w * S.h); S.obs = {};
     const th = S.theme;
@@ -175,7 +175,7 @@ const Combat = (() => {
   }
   function upos(u, now) {
     let x = u.x, y = u.y;
-    if (u.anim) { const k = Math.min(1, (now - u.anim.t0) / u.anim.d); x = u.anim.fx + (u.x - u.anim.fx) * k; y = u.anim.fy + (u.y - u.anim.fy) * k; if (k >= 1) u.anim = null; }
+    if (u.anim) { const k = Math.max(0, Math.min(1, (now - u.anim.t0) / u.anim.d)); x = u.anim.fx + (u.x - u.anim.fx) * k; y = u.anim.fy + (u.y - u.anim.fy) * k; if (k >= 1) u.anim = null; }
     if (u.lunge) { const k = (now - u.lunge.t0) / 220; if (k >= 1) u.lunge = null; else { const a = Math.sin(k * Math.PI) * 0.38; x += u.lunge.dx * a; y += u.lunge.dy * a; } }
     return [x, y];
   }
@@ -241,6 +241,10 @@ const Combat = (() => {
     }
     if (u && alive(u)) { diamond(c, u.x, u.y, 2); c.strokeStyle = 'rgba(255,214,90,' + (0.6 + 0.4 * Math.sin(now / 180)) + ')'; c.lineWidth = 2.5; c.stroke(); }
     if (S.hover && inb(S.hover.x, S.hover.y)) { diamond(c, S.hover.x, S.hover.y, 1); c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 1.5; c.stroke(); }
+    for (const cl of S.clouds) {
+      c.fillStyle = 'rgba(155,195,74,' + (0.22 + 0.06 * Math.sin(now / 400)) + ')';
+      for (const [x, y] of cl.cells) { diamond(c, x, y, 0); c.fill(); }
+    }
     // depth-sorted entities
     const list = [];
     for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) if (S.grid[key(x, y)]) list.push({ d: x + y, b: [x, y, S.grid[key(x, y)]] });
@@ -557,7 +561,7 @@ const Combat = (() => {
       for (const e of foesOf(u)) {
         if (cheb(e, u) === 1 && cheb(e, { x: nx, y: ny }) > 1 && canAct(e) && !e.fleeing && !u.aoo.has(e) && !u.hidden) {
           u.aoo.add(e); await strike(e, u, { free: true });
-          if (!canAct(u)) return;
+          if (!alive(u) || helpless(u) || (!u.staggering && !canAct(u))) return;
         }
       }
       faceTo(u, { x: nx, y: ny });
@@ -569,6 +573,23 @@ const Combat = (() => {
 
   /* ---------------- spells ---------------- */
   function unitsIn(cells) { const set = new Set(cells.map(([x, y]) => key(x, y))); return S.units.filter(u => alive(u) && set.has(key(u.x, u.y))); }
+  /* stinking clouds linger: anyone inside saves vs. poison or reels until 1d4+1 rounds after getting out */
+  const inCloud = (x, y) => S.clouds.some(cl => cl.cells.some(([cx, cy]) => cx === x && cy === y));
+  function cloudSave(v, side) {
+    if (!alive(v) || isUndead(v) || v.eff.nausea) return;
+    if (save(v, 0, { poison: true })) { log(v.name + ' holds their breath and saves.', 'dim'); return; }
+    v.eff.nausea = rnd(4) + 1; float(v, 'sick', '#9bc34a');
+    log(v.name + ' reels, retching, in the vapors.', side == null ? 'dim' : v.side === side ? 'bad' : 'good');
+  }
+  // a reeling creature still inside staggers for the nearest clean air
+  async function stagger(u) {
+    const f = flood(u); let best = -1, bd = 1e9;
+    for (let k = 0; k < f.dist.length; k++) if (f.dist[k] < bd && !inCloud(k % S.w, (k / S.w) | 0)) { bd = f.dist[k]; best = k; }
+    if (best < 0 || bd <= 0) return;
+    S.cur = u; log(u.name + ' staggers out of the cloud.', 'dim');
+    u.staggering = true; await walk(u, pathTo(f, best)); u.staggering = false;
+    S.cur = null;
+  }
   /* via: cast from a scroll or a device, at that item's level, with no chance of a priest's prayer failing */
   async function cast(u, id, t, via) {
     S.el = SPELL_EL[id] || null;
@@ -615,11 +636,10 @@ const Combat = (() => {
       }
       case 'stinkingCloud': {
         await burst(t.x, t.y, sp.r, '#9bc34a', 600);
-        for (const v of unitsIn(areaCells(t.x, t.y, sp.r))) {
-          if (isUndead(v)) continue;
-          if (save(v, 0, { poison: true })) log(v.name + ' holds their breath and saves.', 'dim');
-          else { v.eff.nausea = rnd(4) + 1; float(v, 'sick', '#9bc34a'); log(v.name + ' retches helplessly in the vapors.', v.side === u.side ? 'bad' : 'good'); }
-        }
+        const cl = { cells: areaCells(t.x, t.y, sp.r), left: Math.max(1, L), side: u.side };
+        S.clouds.push(cl);
+        log('A cloud of yellow vapors billows up and hangs there (' + cl.left + ' round' + (cl.left > 1 ? 's' : '') + ').', 'dim');
+        for (const v of unitsIn(cl.cells)) cloudSave(v, u.side);
         break;
       }
       case 'fireball': {
@@ -812,7 +832,7 @@ const Combat = (() => {
       if (id === 'mirrorImage') { if (!u.images) return { id, t: u }; }
       else if (id === 'stinkingCloud') {
         let best = null, bn = 1;
-        for (const f of foes) { const vs = unitsIn(areaCells(f.x, f.y, 1.5)); const n = vs.filter(v => v.side !== u.side && canAct(v)).length - vs.filter(v => v.side === u.side && !isUndead(v)).length * 2; if (n > bn && edist(u, f) <= 6) { bn = n; best = f; } }
+        for (const f of foes) { const vs = unitsIn(areaCells(f.x, f.y, 1.5)); const n = vs.filter(v => v.side !== u.side && canAct(v)).length - vs.filter(v => v.side === u.side && !isUndead(v)).length * 2; if (n > bn && edist(u, f) <= SPELLS.stinkingCloud.range && los(u, f) && !inCloud(f.x, f.y)) { bn = n; best = f; } }
         if (best) return { id, t: { x: best.x, y: best.y } };
       } else if (id === 'magicMissile') {
         const t = foes.filter(f => los(u, f) && !f.eff.shield).sort((a, b) => a.hp - b.hp)[0];
@@ -1165,6 +1185,9 @@ const Combat = (() => {
     S.order = S.units.filter(alive).sort((a, b) => a.init - b.init);
   }
   function endRound() {
+    for (const u of S.units) if (alive(u) && u.eff.nausea && inCloud(u.x, u.y)) u.eff.nausea = Math.max(u.eff.nausea, rnd(4) + 2);
+    for (const cl of S.clouds) if (--cl.left <= 0) log('The stinking cloud thins away.', 'dim');
+    S.clouds = S.clouds.filter(cl => cl.left > 0);
     for (const u of S.units) {
       if (!alive(u)) continue;
       for (const k in u.eff) {
@@ -1180,6 +1203,10 @@ const Combat = (() => {
   async function turn(u) {
     u.mp = moveSq(u) * 2; u.aoo = new Set(); u.acted = false; u.attacked = false; u.atk = 0; u.lastRanged = false;
     if (u.fleeing && (u.x === 0 || u.y === 0 || u.x === S.w - 1 || u.y === S.h - 1)) { u.gone = true; log(u.name + ' flees the battle.', 'dim'); await sleep(200); return; }
+    if (alive(u) && !helpless(u) && inCloud(u.x, u.y)) {
+      cloudSave(u, null);
+      if (u.eff.nausea) { u.eff.nausea = Math.max(u.eff.nausea, 2); await stagger(u); return; }
+    }
     if (!canAct(u)) return;
     S.cur = u; showCmds();
     if (u.pc && !S.auto) await playerTurn(u);

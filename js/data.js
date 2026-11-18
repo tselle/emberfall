@@ -81,7 +81,7 @@ const SPELLS = {
   burningHands: { name: 'Burning Hands', c: 'M', l: 1, tgt: 'cone', range: 1, desc: 'Fan of flame on adjacent foes: 1d3 + 2/level damage, save for half.' },
   armor:        { name: 'Armor', c: 'M', l: 1, tgt: 'ally', range: 1, camp: true, desc: 'Touch: grants AC 6 until 8 + level points of damage are absorbed.' },
   shield:       { name: 'Shield', c: 'M', l: 1, tgt: 'self', range: 0, desc: 'AC 2 vs. missiles, AC 4 vs. melee; negates Magic Missile. 5 rounds/level.' },
-  stinkingCloud:{ name: 'Stinking Cloud', c: 'M', l: 2, tgt: 'area', range: 3, r: 1.5, desc: 'Nauseating vapors: save vs. poison or be helpless for 1d4+1 rounds.' },
+  stinkingCloud:{ name: 'Stinking Cloud', c: 'M', l: 2, tgt: 'area', range: 9, r: 1.5, desc: 'A cloud of nauseating vapors that lingers 1 round/level. Anyone in it must save vs. poison each round or reel, unable to attack or cast, until 1d4+1 rounds after leaving it. The reeling stagger out if they can.' },
   mirrorImage:  { name: 'Mirror Image', c: 'M', l: 2, tgt: 'self', range: 0, desc: 'Creates 1d4 (+1 per 3 levels) illusory duplicates that absorb attacks.' },
   strength:     { name: 'Strength', c: 'M', l: 2, tgt: 'ally', range: 1, camp: true, desc: 'Touch: raises Strength (1d8 warriors, 1d6 rogues/priests, 1d4 wizards) for 1 hour/level.' },
   knock:        { name: 'Knock', c: 'M', l: 2, tgt: 'none', range: 0, explore: true, desc: 'Opens a locked or stuck door. Cast it when facing a locked door.' },
