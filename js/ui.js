@@ -377,7 +377,10 @@ function showSheet(ch) {
       h('td', { text: it.name, class: it.magic ? 'magic' : '', title: itemDesc(it) }), h('td', { class: 'note', text: itemDesc(it) }),
       h('td', { class: 'acts' },
         slotOf(ch, it) ? h('button', { class: 'btn mini', text: 'Equip', disabled: !canUse(ch, it), title: canUse(ch, it) ? '' : 'Not usable by this class', onclick: () => { msg = equip(ch, id) || ''; render(); } }) : null,
-        (it.t === 'p' || it.t === 'k' || (it.t === 'x' && it.spell && SPELLS[it.spell].c === 'M') || (it.t === 'd' && it.camp)) ? h('button', { class: 'btn mini', text: it.t === 'x' ? 'Learn' : it.t === 'k' ? 'Read' : 'Use', disabled: !alive || Combat.active, onclick: () => useItem(id) }) : null,
+        (it.t === 'p' || it.t === 'k' || (it.t === 'x' && it.spell && SPELLS[it.spell].c === 'M') || (it.t === 'd' && it.camp)) ? (() => {
+          const known = it.t === 'x' && ch.book && ch.book.includes(it.spell);
+          return h('button', { class: 'btn mini', text: it.t === 'x' ? 'Learn' : it.t === 'k' ? 'Read' : 'Use', disabled: !alive || Combat.active || known, title: known ? ch.name + ' already knows this spell.' : '', onclick: () => useItem(id) });
+        })() : null,
         others.length ? h('select', { class: 'mini', onchange: e => { const t = P().find(c => c.id === e.target.value); if (t) { ch.inv.splice(idx, 1); t.inv.push(id); msg = it.name + ' given to ' + t.name + '.'; render(); } } },
           h('option', { value: '', text: 'Give…' }), others.map(c => h('option', { value: c.id, text: c.name }))) : null,
         it.t !== 'q' ? h('button', { class: 'btn mini dim', text: 'Drop', title: 'Leave it on the ground here. It can be picked up again later.', onclick: () => { if (dropItem(ch, idx) != null) msg = it.name + ' dropped on the ground.'; render(); } }) : null)); });
