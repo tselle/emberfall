@@ -72,6 +72,9 @@ const Over = (() => {
   const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? '^' : def.grid[y][x];
   const terr = (x, y) => { const ch = at(x, y); return TERRAIN[ch] || TERRAIN.site; };
   const isRoad = ch => ch === '=' || ch === '+' || (def.sites[ch] && def.sites[ch].road);
+  // a map may recolour its ground (grey heath on the moors, pale grass in the cold hills)
+  const colAt = (x, y) => { const ch = at(x, y), k = TERRAIN[ch] ? ch : '.'; return (def.colors && def.colors[k]) || terr(x, y).col; };
+  const homeKey = () => Object.keys(def.sites).find(k => def.sites[k].home);
 
   function init(canvas) {
     cv = canvas; cv.width = CW * SS; cv.height = CH * SS; c = cv.getContext('2d');
@@ -111,7 +114,7 @@ const Over = (() => {
     // 1. soft biome colours: a one-pixel-per-tile image, upscaled with smoothing
     const lo = document.createElement('canvas'); lo.width = W; lo.height = H;
     const l = lo.getContext('2d');
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { l.fillStyle = terr(x, y).col; l.fillRect(x, y, 1, 1); }
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { l.fillStyle = colAt(x, y); l.fillRect(x, y, 1, 1); }
     g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
     g.drawImage(lo, 0, 0, W * TS, H * TS);
     // 2. grain
@@ -139,7 +142,7 @@ const Over = (() => {
     const m = mini.getContext('2d');
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const ch = at(x, y);
-      m.fillStyle = ch === '~' ? '#2f6188' : ch === '^' ? '#9a958b' : isRoad(ch) ? '#c9b383' : def.sites[ch] ? '#ffd27a' : terr(x, y).col;
+      m.fillStyle = ch === '~' ? '#2f6188' : ch === '^' ? '#9a958b' : isRoad(ch) ? '#c9b383' : def.sites[ch] ? '#ffd27a' : colAt(x, y);
       m.fillRect(x, y, 1, 1);
     }
     fog = document.createElement('canvas'); fog.width = W; fog.height = H;
@@ -329,7 +332,7 @@ const Over = (() => {
       seen[y * W + x] = 1; vis.add(y * W + x);
     }
     // the walls and spire of a town can be seen from far off
-    for (const k in def.sites) if (k === 'E') { const p = find(k); if (Math.hypot(p.x - G.x, p.y - G.y) < 9) seen[p.y * W + p.x] = 1; }
+    for (const k in def.sites) if (def.sites[k].home) { const p = find(k); if (Math.hypot(p.x - G.x, p.y - G.y) < 9) seen[p.y * W + p.x] = 1; }
     const f = fog.getContext('2d'), id = f.createImageData(W, H);
     for (let i = 0; i < W * H; i++) { id.data[i * 4] = 9; id.data[i * 4 + 1] = 10; id.data[i * 4 + 2] = 15; id.data[i * 4 + 3] = vis.has(i) ? 0 : seen[i] ? 70 : 255; }
     f.putImageData(id, 0, 0);
@@ -454,16 +457,16 @@ const Over = (() => {
   }
   const minimap = canvas => mapTo(canvas, false);
   const fullMap = canvas => mapTo(canvas, true);
-  /* the party sets out knowing the roads and the country around Emberfall */
+  /* the party sets out knowing the roads and the country around its home town */
   function knownLand() {
-    const seen = G.seen[G.map], e = find('E');
+    const seen = G.seen[G.map], e = find(homeKey());
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       if (Math.hypot(x - e.x, y - e.y) <= 5.5) seen[y * W + x] = 1;
       if (isRoad(at(x, y))) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (x + dx >= 0 && y + dy >= 0 && x + dx < W && y + dy < H) seen[(y + dy) * W + x + dx] = 1;
     }
   }
-  function revealAround(k, r) {
-    const p = find(k), seen = G.seen.wild; if (!p || !seen) return;
+  function revealAround(k, r, seen) {
+    const p = find(k); if (!p || !seen) return;
     for (let y = p.y - r; y <= p.y + r; y++) for (let x = p.x - r; x <= p.x + r; x++) if (x >= 0 && y >= 0 && x < W && y < H) seen[y * W + x] = 1;
   }
   return { init, prepare, draw, reveal, place, travel, minimap, fullMap, at, terr, find, night, revealAround, knownLand, onStep(fn) { step = fn; }, get size() { return [W, H]; } };
@@ -481,10 +484,17 @@ function stepMinutes(dx, dy, t) {
   return Math.round(perMile * t.cost * (dx && dy ? 1.4 : 1) * (G.march >= 600 ? 1.5 : 1));
 }
 function wildEnsureSeen() {
-  const [w, h] = Over.size;
+  const [w, h] = Over.size, known = G.map === 'wild' ? 'wildKnown' : 'known:' + G.map;
   if (!G.seen[G.map] || G.seen[G.map].length !== w * h) G.seen[G.map] = new Array(w * h).fill(0);
-  if (!G.flags.wildKnown) { G.flags.wildKnown = 1; Over.knownLand(); }
+  if (!G.flags[known]) { G.flags[known] = 1; Over.knownLand(); }
 }
+/* the overland map a commission's reveal refers to: the current one, else the module's own */
+function wildMapId() {
+  if (MAPS[G.map] && MAPS[G.map].overland) return G.map;
+  return mod().maps.find(id => MAPS[id].overland) || 'wild';
+}
+const wildRumors = () => (X.def && X.def.rumors) || WILD_RUMORS;
+const siteFlag = k => (G.map === 'wild' ? 'wild:' : G.map + ':') + k;
 function wildCmds() {
   const go = (dx, dy) => () => wildMove(dx, dy);
   UI.cmds([
@@ -495,7 +505,13 @@ function wildCmds() {
     { icon: 'camp', label: 'Camp', key: 'R', on: wildCamp }, ...sharedCmds(),
   ], 'Click the map to walk toward a point. Travel time depends on terrain and your slowest member\'s movement rate.');
 }
-function revealSite(k) { if (!G.seen.wild) { const g = MAPS.wild.grid; G.seen.wild = new Array(g.length * g[0].length).fill(0); } Over.prepare(MAPS.wild); Over.revealAround(k, 1); }
+function revealSite(k, map) {
+  map = map || wildMapId();
+  const d = MAPS[map]; if (!d || !d.overland) return;
+  if (!G.seen[map]) G.seen[map] = new Array(d.grid.length * d.grid[0].length).fill(0);
+  Over.prepare(d); Over.revealAround(k, 1, G.seen[map]);
+  if (X.def && X.def !== d && X.def.overland) Over.prepare(X.def);
+}
 
 
 async function wildMove(dx, dy) {
@@ -515,12 +531,12 @@ async function wildMove(dx, dy) {
   if (groundAt().length) await lootHere();
   const ch = Over.at(nx, ny);
   if (X.def.sites[ch]) return visitSite(ch);
-  const chance = 1 - Math.pow(1 - t.enc * (Over.night() ? 1.5 : 1), mins / 60);
+  const chance = 1 - Math.pow(1 - t.enc * (X.def.encRate || 1) * (Over.night() ? 1.5 : 1), mins / 60);
   if (Math.random() < chance) await wildEncounter(t, G.x - dx, G.y - dy);
 }
 
 function rollEncounter(t) {
-  const n = Over.night(), list = WILD_ENC[t.table].filter(e => !(e.night && !n) && !(e.day && n));
+  const n = Over.night(), list = ((X.def.enc && X.def.enc[t.table]) || WILD_ENC[t.table]).filter(e => !(e.night && !n) && !(e.day && n));
   let r = Math.random() * list.reduce((s, e) => s + e.w, 0);
   for (const e of list) if ((r -= e.w) < 0) return e;
   return list[0];
@@ -576,14 +592,14 @@ async function friendlyEncounter(kind) {
     const i = await choice('On the Road', 'A peddler\'s cart creaks toward you, pulled by a patient mule. "Fair day! Potions, bandages, a good knife? Prices fair as the weather."', [{ label: 'Trade', cls: 'primary' }, { label: 'Wave and pass' }]);
     if (i === 0) shopDialog('village');
   } else {
-    await msgBox('On the Road', 'A band of pilgrims bound for the Abbey of the Dawn shares bread and news with you.\n' + pick(WILD_RUMORS));
+    await msgBox('On the Road', (X.def.travellers || 'A band of pilgrims bound for the Abbey of the Dawn shares bread and news with you.') + '\n' + pick(wildRumors()));
   }
 }
 
 async function wildCamp() {
   if (busy()) return;
-  const t = Over.terr(G.x, G.y), safe = Over.at(G.x, G.y) === 'S';
-  const how = await campChoice('Rest here for eight hours? Spells will be memorized, each character recovers 1 hit point, and the march fatigue passes.' + (safe ? '\nWithin the Dawnstones no evil will trouble your sleep.' : '\nA watch will be kept, but in the ' + t.name.toLowerCase() + ' something may find you.'));
+  const t = Over.terr(G.x, G.y), here = X.def.sites[Over.at(G.x, G.y)], safe = here && here.safe;
+  const how = await campChoice('Rest here for eight hours? Spells will be memorized, each character recovers 1 hit point, and the march fatigue passes.' + (safe ? '\nWithin ' + safe + ' no evil will trouble your sleep.' : '\nA watch will be kept, but in the ' + t.name.toLowerCase() + ' something may find you.'));
   if (!how) return;
   let rests = 0, cured = 0;
   do {
@@ -619,7 +635,8 @@ async function lootCache(key, ev) {
 }
 async function visitSite(k) {
   if (busy()) return;
-  const flag = 'wild:' + k, s = X.def.sites[k];
+  const flag = siteFlag(k), s = X.def.sites[k];
+  if (G.map !== 'wild') return siteVisit(k, s, flag);
   if (k === 'E') {
     if (!await choice('Emberfall', 'The walls of Emberfall rise above the river, the burned spire of the abbey black against the sky. The gate wardens wave you through.', [{ label: 'Enter the town', cls: 'primary' }, { label: 'Stay outside', cls: 'dim' }])) goTo('town', 12, 19, 0);
   } else if (k === 'M') hamletDialog();
@@ -628,7 +645,7 @@ async function visitSite(k) {
     G.flags[flag + ':seen'] = 1;
     if (!await choice(s.name, txt + (G.flags['q:gnolls'] ? '\nThe tower is silent now.' : ''), [{ label: 'Enter the tower', cls: 'primary' }, { label: 'Leave', cls: 'dim' }])) goTo('tower', 9, 13, 0);
   } else if (k === 'B') await brigandCamp(flag);
-  else if (k === 'H') await hermit(flag);
+  else if (k === 'H') await hermit(flag, s);
   else if (k === 'S') {
     if (!G.flags[flag]) {
       G.flags[flag] = 1;
@@ -679,28 +696,86 @@ async function brigandCamp(flag) {
   const r = await fight({ mons: [['captain', 1], ['bandit', 5], ['archer', 3]], arena: 'forest', night: Over.night(), surprise, text }, G.x, G.y);
   if (r === 'win') { G.flags[flag] = 1; await lootCache(flag + ':loot', { gold: 380, items: ['potHeal', 'potHeal', 'shield1'], text: 'The captain\'s strongbox sits under his cot, heavy with the takings of the east road.' }); }
 }
-async function hermit(flag) {
+/* a healer who tends the party once a week. heal: { who, away, text } */
+async function hermit(flag, s) {
+  const c = (s && s.heal) || {}, title = (s && s.name) || 'Hermit\'s Cottage';
   const last = G.flags[flag], day = Math.floor(G.time / 1440);
-  if (last != null && day - last < 7) return void msgBox('Hermit\'s Cottage', 'Old Wenna is out gathering herbs. A note pinned to the door reads, in a spidery hand: "Back in a few days. Don\'t touch the mushrooms."');
+  if (last != null && day - last < 7) return void msgBox(title, c.away || 'Old Wenna is out gathering herbs. A note pinned to the door reads, in a spidery hand: "Back in a few days. Don\'t touch the mushrooms."');
   G.flags[flag] = day;
   for (const ch of P()) if (!ch.dead) { ch.hp = ch.maxhp; ch.poison = null; }
   refreshAll();
-  await msgBox('Hermit\'s Cottage', 'A tiny cottage, smothered in ivy, smoke curling from the chimney. Old Wenna squints at you over her spectacles. "Hurt, are you? Sit. Sit."\nShe binds your wounds with herbs and foul-smelling poultices, and draws out any venom. Every living member of the party is fully healed.\n"Come back in a week if you\'re still alive," she says. Then, as you leave: "' + pick(WILD_RUMORS) + '"');
+  await msgBox(title, (c.text || 'A tiny cottage, smothered in ivy, smoke curling from the chimney. Old Wenna squints at you over her spectacles. "Hurt, are you? Sit. Sit."\nShe binds your wounds with herbs and foul-smelling poultices, and draws out any venom.') +
+    ' Every living member of the party is fully healed.\n"Come back in a week if you\'re still alive," ' + (c.who || 'she') + ' says. Then, as you leave: "' + pick(wildRumors()) + '"');
 }
-function hamletDialog() {
-  const body = h('div');
-  let msg = 'A dozen cottages around a watermill on the stream. The miller\'s wife keeps rooms above the millhouse, and sells what the peddlers leave.' + (G.quests.gnolls === 'done' ? ' Children run to greet you: Tamsin Hask is among them.' : '');
-  modal({ title: 'Millbrook', body, wide: true, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: () => { Over.draw(); refreshAll(); } });
+/* a hamlet with beds, a little trade and gossip. hamlet: { text, rest, slept, trade } */
+function hamletDialog(s) {
+  const c = (s && s.hamlet) || {}, rumors = wildRumors(), body = h('div');
+  let msg = c.text || ('A dozen cottages around a watermill on the stream. The miller\'s wife keeps rooms above the millhouse, and sells what the peddlers leave.' + (G.quests.gnolls === 'done' ? ' Children run to greet you: Tamsin Hask is among them.' : ''));
+  modal({ title: (s && s.name) || 'Millbrook', body, wide: true, buttons: [{ label: 'Leave', cls: 'primary' }], onclose: () => { Over.draw(); refreshAll(); } });
   const cost = () => Math.max(1, P().length);
   function render() {
     body.replaceChildren(h('div', { class: 'msg', text: msg }),
       h('div', { class: 'dimtxt', text: 'Party gold: ' + G.gold + ' gp. A night costs ' + cost() + ' gp.' }),
       h('div', { class: 'col' },
-        h('button', { class: 'btn', text: 'Rest at the millhouse (' + cost() + ' gp)', disabled: G.gold < cost(), onclick: () => { G.gold -= cost(); restNight(); msg = 'The millwheel turns all night, a comfortable sound. Spells are memorized anew.'; saveGame('auto'); render(); } }),
-        h('button', { class: 'btn', text: 'Trade with the miller\'s wife', onclick: () => shopDialog('village') }),
-        h('button', { class: 'btn', text: 'Listen to the gossip', onclick: () => { G.wrumor = ((G.wrumor == null ? -1 : G.wrumor) + 1) % WILD_RUMORS.length; msg = WILD_RUMORS[G.wrumor]; render(); } }),
+        h('button', { class: 'btn', text: (c.rest || 'Rest at the millhouse') + ' (' + cost() + ' gp)', disabled: G.gold < cost(), onclick: () => { G.gold -= cost(); restNight(); msg = c.slept || 'The millwheel turns all night, a comfortable sound. Spells are memorized anew.'; saveGame('auto'); render(); } }),
+        h('button', { class: 'btn', text: c.trade || 'Trade with the miller\'s wife', onclick: () => shopDialog('village') }),
+        h('button', { class: 'btn', text: 'Listen to the gossip', onclick: () => { G.wrumor = ((G.wrumor == null ? -1 : G.wrumor) + 1) % rumors.length; msg = rumors[G.wrumor]; render(); } }),
         h('button', { class: 'btn', text: 'Save game', onclick: () => saveDialog(true) })));
     refreshAll();
   }
   render();
+}
+
+/* ============================================================
+   Sites described by data: every overland map but the Emberwild,
+   whose sites keep their own handlers above.
+     enter: { map, x, y, dir, text, again, go, need, locked }  a town or dungeon
+     hamlet: {...}  beds and trade (see hamletDialog)    heal: {...}  a healer (see hermit)
+     holy: { xp, text, again }  a blessing on the first visit; with safe, a refuge to camp in
+     fight: { mons, arena, approach, text, loot, won, after, reveal }  a lair to clear once
+     text: a plain description
+   ============================================================ */
+async function siteVisit(k, s, flag) {
+  if (s.enter) {
+    const e = s.enter;
+    if (e.need && !G.flags[e.need]) return void msgBox(s.name, e.locked);
+    const again = G.flags[flag + ':seen'] && e.again;
+    G.flags[flag + ':seen'] = 1;
+    if (!await choice(s.name, again || e.text, [{ label: e.go || 'Enter', cls: 'primary' }, { label: 'Stay outside', cls: 'dim' }])) goTo(e.map, e.x, e.y, e.dir || 0);
+    return;
+  }
+  if (s.hamlet) return hamletDialog(s);
+  if (s.heal) return hermit(flag, s);
+  if (s.holy) {
+    if (G.flags[flag]) return void msgBox(s.name, s.holy.again);
+    G.flags[flag] = 1;
+    const live = P().filter(c => !c.dead);
+    live.forEach(c => awardXP(c, s.holy.xp));
+    await msgBox(s.name, s.holy.text + '\nEach member of the party gains ' + s.holy.xp + ' experience.' + (s.safe ? ' Here, at least, you may rest without fear.' : ''));
+    return void refreshAll();
+  }
+  if (s.fight) return siteLair(s, flag);
+  if (s.text) await msgBox(s.name, s.text);
+}
+async function siteLair(s, flag) {
+  const f = s.fight;
+  if (G.flags[flag]) return void msgBox(s.name, f.after);
+  const up = alivePC(), thief = up.filter(c => c.cls === 'T').sort((a, b) => b.lvl - a.lvl)[0];
+  const opts = [{ label: 'Attack', cls: 'primary', id: 'atk' }];
+  if (thief) opts.push({ label: thief.name.split(' ')[0] + ': scout ahead (Move Silently ' + thiefSkills(thief).ms + '%)', id: 'scout' });
+  opts.push({ label: 'Withdraw', cls: 'dim', id: 'leave' });
+  const o = opts[await choice(s.name, f.approach, opts)];
+  if (o.id === 'leave') return;
+  let surprise = null, text = f.text;
+  if (o.id === 'scout') {
+    if (rnd(100) <= thiefSkills(thief).ms) { surprise = 'enemy'; text += '\n' + thief.name + ' creeps close unseen and signals the attack. They are caught off guard!'; }
+    else { surprise = 'party'; text += '\nA stone turns under ' + thief.name + '\'s foot. They are on you before you are ready!'; }
+  }
+  const r = await fight({ mons: f.mons, arena: f.arena || 'plains', night: Over.night(), surprise, text }, G.x, G.y);
+  if (r !== 'win') return;
+  G.flags[flag] = 1;
+  if (f.loot) await lootCache(flag + ':loot', f.loot);
+  if (f.reveal) revealSite(f.reveal);
+  if (f.won) await msgBox(s.name, f.won);
+  Over.draw(); refreshAll();
 }

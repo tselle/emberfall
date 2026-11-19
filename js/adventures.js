@@ -258,6 +258,130 @@ const ADVENTURES = (() => {
       .concat(byCost(forSale(['device'], L).map(charged)), scrolls);
   }
 
+  /* ---------------- the country around the town ----------------
+     An overland map (one square a mile, see overland.js): mountains at the edges, a river with a bridge,
+     woods, hills and fen, the town at the top where its south gate lets out, and sites scattered about:
+     lairs to clear, a shrine to camp at, a healer, a hamlet and the road out. Wandering encounters come from
+     the theme's monsters and the beasts of each kind of country, sized to the company as the dungeon's are. */
+  const BEASTS = {
+    plains: ['jackal', 'wildDog', 'wolf', 'hyena', 'direWolf', 'lion', 'wildBoar', 'sabreTooth', 'rhinoceros', 'bulette', 'elephant', 'mammoth'],
+    forest: ['wildDog', 'wolf', 'bearBlack', 'spiderHuge', 'bearBrown', 'owlbear', 'spiderGiant', 'bearCave', 'displacerBeast', 'giantBoar', 'dragonGreen'],
+    hills: ['wolf', 'giantBadger', 'mountainLion', 'ogre', 'manticore', 'griffon', 'wyvern', 'ettin', 'chimera', 'giantHill', 'giantStone', 'dragonRed'],
+    swamp: ['giantFrog', 'giantToad', 'lizardman', 'crocodile', 'giantLizard', 'giantCrocodile', 'troll', 'hydra', 'shamblingMound', 'hydraGreat', 'willowisp', 'dragonBlack'],
+  };
+  const LAIRS = {
+    plains: [['Raiders\' Camp', 'camp'], ['Burned Steading', 'farm'], ['Broken Tower', 'tower'], ['Gallows Field', 'stones']],
+    forest: [['Hunters\' Hollow', 'cave'], ['The Dark Thicket', 'camp'], ['Woodcutters\' Ruin', 'hut'], ['Old Shrine', 'chapel']],
+    hills: [['Cave of Bones', 'cave'], ['Broken Tor', 'tower'], ['High Cairns', 'stones'], ['Ravens\' Crag', 'cave']],
+    swamp: [['Drowned Chapel', 'chapel'], ['The Black Mere', 'cave'], ['Sunken Hall', 'chapel'], ['Reed Village', 'camp']],
+  };
+  const PALETTES = [null, { '.': '#7f8a5e', T: '#2f4a35', n: '#8f8b6a' }, { '.': '#7a7650', T: '#33432c', n: '#857a56', '%': '#4a503a' }, { '.': '#86924c', T: '#3a5a2e' }];
+  const ARENA = { '.': 'plains', T: 'forest', n: 'hills', '%': 'swamp' }, TABLE = { '.': 'plains', T: 'forest', n: 'hills', '%': 'swamp' };
+  // things that lie in wait in one place, and do not roam the countryside
+  const LURKERS = ['mimic', 'piercer', 'lurkerAbove', 'trapper', 'roper', 'violetFungus', 'gelatinousCube', 'ochreJelly', 'grayOoze', 'blackPudding', 'otyugh', 'neoOtyugh', 'shrieker'];
+  const DIR8 = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  function wilderness(R, o) {
+    const big = { S: 0, M: 1, L: 2, H: 3 }[o.sizeKey], W = 28 + big * 4, H = 20 + big * 2;
+    const g = Array.from({ length: H }, (_, y) => Array.from({ length: W }, (_, x) => (x === 0 || y === 0 || x === W - 1 || y === H - 1 ? '^' : '.')));
+    const inside = (x, y) => x > 0 && y > 0 && x < W - 1 && y < H - 1;
+    // ragged mountains along the edges, thickest at the top behind the town
+    for (let x = 0; x < W; x++) { for (let y = 1; y < 1 + ri(R, 0, 1); y++) g[y][x] = '^'; if (R() < 0.35) g[H - 2][x] = '^'; }
+    for (let y = 0; y < H; y++) { if (R() < 0.35) g[y][1] = '^'; if (R() < 0.35) g[y][W - 2] = '^'; }
+    const blob = (ch, cx, cy, rx, ry) => { for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1 + (R() - 0.5) * 0.5 && g[y][x] === '.') g[y][x] = ch; };
+    const kinds = ['T', 'T', 'n', 'n', '%'], nb = 4 + big;
+    if (o.themeKey === 'swamp') kinds.push('%', '%'); if (o.themeKey === 'beasts' || o.themeKey === 'lycanthrope') kinds.push('T', 'T');
+    if (o.themeKey === 'goblinoid' || o.themeKey === 'giants') kinds.push('n', 'n');
+    for (let i = 0; i < nb; i++) blob(pk(R, kinds), ri(R, 3, W - 4), ri(R, 5, H - 3), 2 + R() * 3.5, 1.5 + R() * 2.5);
+    // a river from the northern mountains to the southern edge, never crossing the town's side of the map
+    const tx = Math.floor(W / 2) + ri(R, -3, 3), riverLeft = R() < 0.5;
+    let rx = riverLeft ? ri(R, 3, Math.max(3, tx - 7)) : ri(R, Math.min(W - 4, tx + 7), W - 4);
+    for (let y = 1; y < H; y++) {
+      g[y][rx] = '~';
+      if (y > 2 && y < H - 2 && R() < 0.3) { const nx = clampN(rx + (R() < 0.5 ? -1 : 1), 2, W - 3); if (Math.abs(nx - tx) > 3) { g[y][nx] = '~'; rx = nx; } }
+    }
+    // the sites
+    const roam = o.pool.filter(m => !LURKERS.includes(m)), pool = roam.length ? roam : BEASTS.plains.filter(m => MONSTERS[m]);
+    const named = m => 'the ' + MONSTERS[m].name.toLowerCase();
+    const L = Math.floor((o.la + o.lb) / 2), sites = {}, spots = [], letters = 'ABCDEFGHIJKLMOPQRSUVWXYZ'.split('');
+    const free = (x, y) => inside(x, y) && g[y][x] !== '^' && g[y][x] !== '~' && spots.every(([sx, sy]) => Math.abs(sx - x) + Math.abs(sy - y) >= 6);
+    const spot = (pred) => { for (let t = 0; t < 400; t++) { const x = ri(R, 2, W - 3), y = ri(R, 4, H - 3); if (free(x, y) && (!pred || pred(g[y][x]))) return [x, y]; } for (let t = 0; t < 400; t++) { const x = ri(R, 2, W - 3), y = ri(R, 3, H - 3); if (free(x, y)) return [x, y]; } return null; };
+    const place = (x, y, s) => { const k = letters.shift(); s.ground = g[y][x]; g[y][x] = k; sites[k] = s; spots.push([x, y]); return k; };
+    g[2][tx] = '.'; g[1][tx] = '^';
+    const home = place(tx, 2, { name: o.town, icon: o.village ? 'village' : 'town', road: true, home: true,
+      enter: { map: o.townId, x: o.start.x, y: o.start.y, dir: 0, go: 'Enter ' + (o.village ? 'the village' : 'the town'), text: 'The gate of ' + o.town + ' stands open by day. The watch looks you over and waves you through.' } });
+    // the road out, at the southern edge
+    const ox = clampN(tx + ri(R, -6, 6), 2, W - 3); g[H - 1][ox] = '.';
+    const out = place(ox, H - 1, { name: 'The Road Out', icon: 'pass', road: true, text: 'The road runs on out of ' + o.wildName.replace(/^The /, 'the ') + ' toward country that is quieter, for now. There is nothing for you that way until ' + o.town + '\'s troubles are ended.' });
+    const xpGap = CLASSES.F.xp[Math.min(19, L)] - CLASSES.F.xp[Math.min(19, L) - 1];
+    const shrine = spot(ch => ch === 'n' || ch === '.');
+    const saint = pk(R, FOLK_A);
+    if (shrine) place(shrine[0], shrine[1], { name: pk(R, ['Shrine of St. ' + saint, 'The ' + pk(R, ['Grey', 'Old', 'Watching', 'Seven']) + ' Stones', saint + '\'s Cross']), icon: 'stones', safe: 'the shrine',
+      holy: { xp: Math.max(50, Math.round(xpGap * 0.04 / 10) * 10), text: 'Old stones stand on the rise, worn by weather and by the hands of pilgrims. The air within the ring is still, and something in it watches over travellers.', again: 'The old stones keep their watch. You may camp here in safety.' } });
+    const healer = spot(ch => ch === 'T' || ch === '.'), hname = pk(R, FOLK_A);
+    if (healer) place(healer[0], healer[1], { name: hname + '\'s Croft', icon: 'hut',
+      heal: { who: 'the healer', text: 'A croft with herbs drying under the eaves. ' + hname + ' looks at your wounds without a word and fetches salves, needle and clean linen, and draws out any venom.', away: 'The croft is shut. A note on the door says ' + hname + ' will be back within the week.' } });
+    if (big >= 1) { const ham = spot(ch => ch === '.'); if (ham) place(ham[0], ham[1], { name: pk(R, TOWN_A) + pk(R, ['ley', 'cot', 'thorpe', 'wick', 'stead']), icon: 'village', road: true,
+      hamlet: { text: 'A handful of cottages, a well and a smithy. The folk are wary of strangers but glad of coin, and there are beds for those who pay.', rest: 'Take beds for the night', slept: 'A quiet night under a sound roof. Spells are memorized anew.', trade: 'Trade with the smith' } }); }
+    // lairs: the villain's servants out in the country, or beasts
+    const nLairs = 2 + Math.min(2, big), wildPool = k => BEASTS[k].filter(m => MONSTERS[m]);
+    for (let i = 0; i < nLairs; i++) {
+      const p = spot(ch => ch !== '.'); if (!p) break;
+      const ground = g[p[1]][p[0]], kind = TABLE[ground] || 'plains', names = LAIRS[kind].filter(([nm]) => !Object.values(sites).some(t => t.name === nm)), [name, icon] = pk(R, names.length ? names : LAIRS[kind]), LL = clampN(o.la + Math.round((o.lb - o.la) * i / Math.max(1, nLairs - 1)), o.la, o.lb);
+      const theirs = R() < 0.65, mons = group(R, theirs ? pool : wildPool(kind), LL, 1.1), who = mons.map(([m]) => named(m)).join(' and ');
+      const loot = Treasure.roll(R, LL, 'cache');
+      place(p[0], p[1], { name, icon, fight: { mons, arena: ARENA[ground] || 'plains',
+        approach: pk(R, ['Smoke rises ahead, and the ground is trampled by many feet.', 'Bones are scattered on the approach, and not all of them are animal.', 'Something has made its home here, and it does not like visitors.', 'Tracks lead in. None lead out.']) + (theirs ? ' ' + o.villain + '\'s mark is daubed on a stone by the way.' : ''),
+        text: pk(R, ['Out they come: ' + who + '!', 'You are seen. ' + who.charAt(0).toUpperCase() + who.slice(1) + ' attack!', 'The lair erupts: ' + who + '!']),
+        loot: { gold: loot.gold, items: loot.items, text: 'In the back of the lair lies what its owners took from travellers on the road.' },
+        won: theirs ? 'Among the dead is a token of ' + o.villain + '. The servants of ' + o.dungeon + ' range farther than ' + o.town + ' knows.' : 'The country around ' + o.town + ' is a little safer.',
+        after: 'The lair is empty now. Nothing has moved back in.' } });
+    }
+    // roads: from the town south to the road out, then to every site that cannot otherwise be reached
+    const at = k => spots[Object.keys(sites).indexOf(k)];
+    const road = (from, to) => {
+      let [x, y] = from; const [x1, y1] = to;
+      while (x !== x1 || y !== y1) {
+        if (y !== y1 && (x === x1 || R() < 0.5)) y += Math.sign(y1 - y); else x += Math.sign(x1 - x);
+        const c = g[y][x]; if (sites[c]) continue;
+        g[y][x] = c === '~' || c === '+' ? '+' : '=';
+      }
+    };
+    road(at(home), at(out));
+    for (const k in sites) if (sites[k].road && k !== home && k !== out) road(at(home), at(k));
+    const reach = () => {
+      const seen = new Set([at(home).join()]), q = [at(home)];
+      while (q.length) { const [x, y] = q.pop(); for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H || seen.has(nx + ',' + ny) || '^~'.includes(g[ny][nx])) continue; seen.add(nx + ',' + ny); q.push([nx, ny]); } }
+      return seen;
+    };
+    for (const k in sites) if (!reach().has(at(k).join())) road(at(home), at(k));
+    // a bridge or a mountain wall may sit right beside a road; nothing else should be needed
+    for (const k in sites) if (!reach().has(at(k).join())) throw new Error(o.townId + ': ' + k + ' unreachable');
+    // tidy: a bridge needs a road on both sides of it
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (g[y][x] === '+' && !['=', '+'].some(c => [g[y][x - 1], g[y][x + 1], g[y - 1][x], g[y + 1][x]].includes(c)) && !Object.keys(sites).some(k => [g[y][x - 1], g[y][x + 1], g[y - 1][x], g[y + 1][x]].includes(k))) g[y][x] = '=';
+    // rumours pointing the way
+    const [hx, hy] = at(home), dirTo = ([x, y]) => DIR8[(Math.round(Math.atan2(x - hx, -(y - hy)) / (Math.PI / 4)) + 8) % 8];
+    const rumors = Object.keys(sites).filter(k => k !== home && k !== out).map(k => {
+      const s = sites[k], d = dirTo(at(k));
+      return s.fight ? '"Keep clear of ' + s.name.replace(/^The /, 'the ') + ', ' + d + ' of town," a drover says. "Things live there."'
+        : s.holy ? '"There is a holy place ' + d + ' of town, ' + s.name.replace(/^The /, 'the ') + '. Nothing evil will trouble you if you sleep there."'
+        : s.heal ? '"' + s.name.replace(/'s Croft$/, '') + ' lives ' + d + ' of town, and can mend wounds the temple cannot afford to."'
+        : '"' + s.name + ' lies ' + d + ' of town. They have beds there, and a smith."';
+    });
+    // wandering encounters: the theme's creatures and the country's beasts, a little lighter than the dungeon's
+    const talk = m => MONSTERS[m].tags.includes('person');
+    const entry = (R2, from, kind, w) => {
+      const mons = group(R2, from, o.la, 0.7).map(([m, n]) => [m, n > 2 ? '1d' + Math.ceil(n / 2) + '+' + Math.floor(n / 2) : n]), who = mons.map(([m]) => named(m)).join(' and ');
+      const e = { w, mons, text: pk(R2, { plains: ['Out of the long grass come ' + who + '!', 'On the open ground ahead: ' + who + '.'], forest: ['Branches crack. Through the trees come ' + who + '!', 'In the green gloom: ' + who + '.'], hills: ['On the ridge above you: ' + who + '!', 'Out of a gully come ' + who + '.'], swamp: ['Out of the reeds rise ' + who + '!', 'The black water stirs: ' + who + '.'], road: ['On the road ahead: ' + who + '.', 'Waiting at the bend of the road: ' + who + '!'] }[kind]) };
+      if (mons.every(([m]) => talk(m))) e.parley = o.themeKey === 'bandits' ? 'toll' : 'pass';
+      return e;
+    };
+    const enc = {};
+    for (const kind of ['plains', 'forest', 'hills', 'swamp']) enc[kind] = [entry(R, pool, kind, 3), entry(R, pool, kind, 2), entry(R, wildPool(kind), kind, 2), entry(R, wildPool(kind), kind, 1)];
+    enc.road = [entry(R, pool, 'road', 3), entry(R, wildPool('plains'), 'road', 2), { w: 2, friendly: 'merchant' }, { w: 1, friendly: 'pilgrims', day: true }];
+    for (const k in sites) delete sites[k].ground;
+    return { name: o.wildName, overland: true, rumors, enc, colors: pk(R, PALETTES) || undefined, travellers: 'A family on the road to ' + o.town + ' shares bread and the news.', grid: g.map(r => r.join('')), sites };
+  }
+
   /* ---------------- one adventure ---------------- */
   const usedTowns = new Set(Object.keys(MODULES).map(k => MODULES[k].names.town)), usedTitles = new Set();
   function build(tier, band, idx, themeKey, sizeKey) {
@@ -374,6 +498,13 @@ const ADVENTURES = (() => {
     MAPS[townId] = { name: town, outdoor: true, facades: true, wall: tmpl.wall, floor: tmpl.floor, safe: true, grid: tmpl.grid.slice(), start: Object.assign({}, tmpl.start), locs: Object.assign({}, tmpl.locs),
       stairs: { '>': Object.assign({ map: lvlIds[0] }, beside(MAPS[lvlIds[0]].grid.map(r => r.split('')), ux, uy)) }, ev: { a: { type: 'text', text: T.entrance } } };
     for (const q in goals) QUESTS[q].goal = goals[q];
+    // the country around the town, on its own random stream so the rest of the adventure is unchanged by it
+    const R2 = rng(7919 * (tier + 1) + 104729 * (idx + 1) + themeKey.length * 31 + 15485863), wildId = id + '_wild';
+    const wildName = pk(R2, [town + ' Vale', 'The ' + town + ' Marches', 'The Downs of ' + town, 'The Wolds of ' + town, 'The Country about ' + town]);
+    MAPS[wildId] = wilderness(R2, { sizeKey, themeKey, town, townId, village, start: MAPS[townId].start, la, lb, pool, villain, dungeon, wildName });
+    const home = Object.keys(MAPS[wildId].sites).find(k => MAPS[wildId].sites[k].home), hy = MAPS[wildId].grid.findIndex(r => r.includes(home));
+    MAPS[townId].exit = { map: wildId, x: MAPS[wildId].grid[hy].indexOf(home), y: hy, dir: 0, title: 'The South Gate', go: 'Travel into the country',
+      text: 'Beyond the gate the road runs out into ' + wildName.replace(/^The /, 'the ') + ': fields and woods, hills and fen, and whatever has come out of ' + lc(dungeon) + ' to hunt in them.' };
 
     // what the tavern knows
     const seenMons = [...new Set(lvlIds.flatMap(k => Object.values(MAPS[k].ev).filter(e => e.type === 'enc').flatMap(e => e.mons.map(([m]) => MONSTERS[m].base || m))))];
@@ -403,11 +534,11 @@ const ADVENTURES = (() => {
     const title = pk(R, [dungeon, dungeon, 'The ' + pk(R, ['Shadow', 'Curse', 'Siege', 'Doom', 'Terror', 'Bane']) + ' of ' + town, villain + ' ' + vTitle]);
     MODULES[id] = {
       code, name: title, lvl: lo, levels: [la, lb], diff: pk(R, Z.diff), size: Z.name, length: Z.length, generated: true, tier,
-      hub: townId, maps: [townId].concat(lvlIds), gold: Math.round(40 * Math.pow(lo, 1.5) / 10) * 10, next: null, shops: village ? {} : { armory: 'adv' + (tier + 1), apothecary: 'advApo' + (tier + 1) },
+      hub: townId, maps: [townId, wildId].concat(lvlIds), gold: Math.round(40 * Math.pow(lo, 1.5) / 10) * 10, next: null, shops: village ? {} : { armory: 'adv' + (tier + 1), apothecary: 'advApo' + (tier + 1) },
       quests, side: sides, final: quests[quests.length - 1], rumors, names,
       blurb: 'In ' + town + ', ' + T.trouble + '. The trail leads to ' + lc(dungeon) + (D > 1 ? ', ' + D + ' levels deep' : '') + ', where ' + vName + ' holds court. Expect ' + three + '.' + needs,
       intro: town + ' was a quiet place until this year. Now ' + T.trouble + '.\n' + T.entrance + '\n' + giver + ' has sent for anyone with a sword and the nerve to use it. The name the frightened use is ' + vName + '.',
-      hint: 'Call at ' + lc(names.hall).replace(/^the /, 'the ') + ' for work' + (village ? ' and the general store for supplies' : ', the forge for arms and the apothecary for potions') + '. The way into ' + lc(dungeon) + ' is at the north end of ' + town + '.',
+      hint: 'Call at ' + lc(names.hall).replace(/^the /, 'the ') + ' for work' + (village ? ' and the general store for supplies' : ', the forge for arms and the apothecary for potions') + '. The way into ' + lc(dungeon) + ' is at the north end of ' + town + ', and the south gate opens onto ' + wildName.replace(/^The /, 'the ') + '.',
       victory: town + ' rings its bells until the ropes fray. ' + villain + ' is gone, ' + lc(dungeon) + ' is silent, and your company\'s names are cut into the lintel of the hall.',
       lose: 'Your company does not come back from ' + lc(dungeon) + '. In ' + town + ' they stop lighting the gate-lamps, and wait.',
     };
