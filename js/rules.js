@@ -180,7 +180,8 @@ const CLERIC_SLOTS = [[1], [2], [2, 1], [3, 2], [3, 3, 1], [3, 3, 2], [3, 3, 2, 
   [7, 7, 7, 7, 5, 3, 2], [8, 8, 8, 8, 6, 4, 2], [9, 9, 8, 8, 6, 4, 2], [9, 9, 9, 8, 7, 5, 2]];
 const PALADIN_SLOTS = { 9: [1], 10: [2], 11: [2, 1], 12: [2, 2], 13: [2, 2, 1], 14: [3, 2, 1], 15: [3, 2, 1, 1], 16: [3, 3, 2, 1], 17: [3, 3, 3, 1], 18: [3, 3, 3, 1], 19: [3, 3, 3, 2], 20: [3, 3, 3, 3] };
 /* the priest spells a paladin may pray for: those of combat, healing and protection */
-const PALADIN_SPELLS = ['cureLight', 'bless', 'protEvil', 'aid', 'slowPoison', 'prayer', 'dispelMagic', 'removeParalysis', 'cureSerious', 'neutralizePoison', 'protEvil10'];
+const PALADIN_SPELLS = ['cureLight', 'bless', 'protEvil', 'aid', 'slowPoison', 'prayer', 'dispelMagic', 'removeParalysis', 'cureSerious', 'neutralizePoison', 'protEvil10',
+  'magicalStone', 'resistFire', 'magicalVestment', 'cureBlindness', 'freeAction'];
 /* healing spells and what they restore, weakest first; healAmount gives the hit points for one casting on a character */
 const CURES = { cureLight: '1d8', cureSerious: '2d8+1', cureCritical: '3d8+3', heal: 'all' };
 function healAmount(id, t) { return CURES[id] === 'all' ? Math.max(1, t.maxhp - Math.max(0, t.hp) - rnd(4)) : rollDice(CURES[id]); }
@@ -353,8 +354,9 @@ function drainLevel(ch) {
   return true;
 }
 /* mages learn one new spell per level gained; this picks for characters advanced automatically */
-const SPELL_PICKS = ['meteorSwarm', 'powerWordKill', 'incendiaryCloud', 'powerWordBlind', 'delayedBlast', 'fingerOfDeath', 'powerWordStun', 'chainLightning', 'disintegrate',
-  'coneOfCold', 'holdMonster', 'cloudkill', 'iceStorm', 'stoneskin', 'fireball', 'haste', 'lightningBolt', 'holdPerson', 'stinkingCloud', 'mirrorImage', 'strength', 'knock'];
+const SPELL_PICKS = ['meteorSwarm', 'powerWordKill', 'incendiaryCloud', 'powerWordBlind', 'delayedBlast', 'fingerOfDeath', 'powerWordStun', 'chainLightning', 'disintegrate', 'deathSpell', 'fleshToStone',
+  'coneOfCold', 'holdMonster', 'cloudkill', 'iceStorm', 'stoneskin', 'fear', 'fireball', 'haste', 'lightningBolt', 'holdPerson', 'slow', 'dispelMagicM', 'vampiricTouch',
+  'stinkingCloud', 'mirrorImage', 'web', 'invisibility', 'acidArrow', 'blindness', 'scare', 'strength', 'knock', 'colorSpray', 'spook'];
 function pickNewSpell(ch) {
   const max = spellSlots(ch).length, id = SPELL_PICKS.find(s => SPELLS[s].l <= max && !ch.book.includes(s));
   if (id) ch.book.push(id);
