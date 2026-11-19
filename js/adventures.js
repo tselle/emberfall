@@ -239,18 +239,24 @@ const ADVENTURES = (() => {
     T: { eq: { weapon: 'shortsword3', armor: 'leather4', ring: 'ringProt3', cloak: 'cloakProt2' }, inv: ['potExtra', 'potInvis', 'potInvis'] },
     M: { eq: { weapon: 'staff3', armor: 'bracers2', ring: 'ringProt3', cloak: 'cloakProt3' }, inv: ['potExtra', 'potExtra', 'staffPower#12'] },
   };
-  /* what the shops of a town stock, by band of levels */
+  /* what the shops of a town stock, by band of levels. A town of band n sells the magic of treasure level n - 1 and
+     below, so the deepest finds stay finds; the rarest things (weight under 4 on the treasure tables) are never for sale,
+     nor is a rod that would sell six resurrections at a cut price. Arms and armor come from the two newest levels only:
+     once +2 blades are on the rack, +1 ones are not worth the space. */
   const silver = ['silverDagger', 'silverMace', 'silverSword', 'silverBow', 'silverSling'];
-  SHOPS.adv1 = SHOPS.armory.concat(silver);
-  SHOPS.adv2 = SHOPS.adv1.concat(['dagger1', 'longsword1', 'mace1', 'shield1', 'chain1']);
-  SHOPS.adv3 = SHOPS.adv2.concat(['longbow1', 'plate1', 'leather1', 'staff1', 'cloakProt1', 'ringProt']);
-  SHOPS.adv4 = SHOPS.adv3.concat(['longsword2', 'mace2', 'shield2', 'plate2', 'bracers6']);
-  SHOPS.adv5 = SHOPS.adv4.concat(['longsword3', 'plate3', 'ringProt2', 'cloakProt2', 'bracers4']);
-  SHOPS.advApo1 = ['potHeal', 'potExtra', 'antidote'];
-  SHOPS.advApo2 = SHOPS.advApo1.concat(['potSpeed', 'potFireRes']);
-  SHOPS.advApo3 = SHOPS.advApo2.concat(['elixirHealth', 'potHeroism', 'potInvis']);
-  SHOPS.advApo4 = SHOPS.advApo3.concat(['potInvuln', 'potGiantHill', 'protUndead']);
-  SHOPS.advApo5 = SHOPS.advApo4.concat(['potSuperHeroism', 'potGiantFrost', 'protFiend', 'protDragon']);
+  const forSale = (cats, lvl, from) => cats.flatMap(c => TREASURE[c]).filter(([id, w, l]) => l <= lvl && l >= (from || 0) && w >= 4 && ITEMS[id] && ITEMS[id].t !== 'k' && id !== 'rodResurrection').map(([id]) => id);
+  // devices are sold fully charged; a single-use one (a javelin) is sold as itself
+  const charged = id => { const m = /^(\d+)d(\d+)\+?(\d+)?$/.exec(ITEMS[id].charges); return m ? id + '#' + (+m[1] * +m[2] + +(m[3] || 0)) : id; };
+  const byCost = ids => [...new Set(ids)].sort((a, b) => item(a).cost - item(b).cost);
+  const SPELL_TOP = [1, 3, 5, 7, 9]; // the highest level of spell scroll each band's apothecary keeps; it stocks the four levels below that too
+  for (let t = 1; t <= 5; t++) {
+    const L = t - 1, top = SPELL_TOP[L];
+    SHOPS['adv' + t] = SHOPS.armory.concat(silver, byCost(forSale(['weapon', 'sword', 'armor', 'ring', 'misc'], L, L - 1)));
+    const scrolls = Object.keys(SPELLS).filter(id => SPELLS[id].l <= top && SPELLS[id].l > top - 4 && (!SPELLS[id].explore || id === 'knock'))
+      .sort((a, b) => SPELLS[b].c.localeCompare(SPELLS[a].c) || SPELLS[a].l - SPELLS[b].l).map(id => 'scroll:' + id);
+    SHOPS['advApo' + t] = byCost(['potHeal', 'potExtra', 'antidote'].concat(forSale(['potion', 'scroll'], L).filter(id => id !== '@scroll')))
+      .concat(byCost(forSale(['device'], L).map(charged)), scrolls);
+  }
 
   /* ---------------- one adventure ---------------- */
   const usedTowns = new Set(Object.keys(MODULES).map(k => MODULES[k].names.town)), usedTitles = new Set();

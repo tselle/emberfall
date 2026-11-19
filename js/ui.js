@@ -512,7 +512,7 @@ function rosterView(onChange) {
 /* ---------------- town services ---------------- */
 function shopDialog(id) {
   const titles = { armory: locName('armory'), apothecary: locName('apothecary'), store: locName('store'), village: 'Country Goods' };
-  const blurb = { armory: shopStock('armory').some(i => ITEMS[i].silver) ? '"Steel, leather and bowstring. And silver, for what walks in the dark. It costs, but so does dying."' : '"Steel, leather and bowstring. If it keeps you alive, I sell it."',
+  const blurb = { armory: shopStock('armory').some(i => item(i).silver) ? '"Steel, leather and bowstring. And silver, for what walks in the dark. It costs, but so does dying."' : '"Steel, leather and bowstring. If it keeps you alive, I sell it."',
     apothecary: '"Careful with the blue ones. Actually, careful with all of them."', village: '"Not much, but it\'s honest, and it\'s here."', store: '"Rope, lamp oil, a good knife and a potion or two. Everything a body needs for a trip underground."' };
   const stock = id === 'village' ? SHOPS.village : shopStock(id);
   const body = h('div', { class: 'shop' });
@@ -524,7 +524,7 @@ function shopDialog(id) {
         h('span', { class: 'gold', text: G.gold + ' gp' })),
       h('div', { class: 'msg', text: msg }),
       h('div', { class: 'cols' },
-        h('div', { class: 'col' }, h('h3', { text: 'For sale' }), h('div', { class: 'scroll' }, h('table', { class: 'inv' }, stock.map(iid => { const it = ITEMS[iid], ok = canUse(buyer, it); return h('tr', { class: ok ? '' : 'unusable' },
+        h('div', { class: 'col' }, h('h3', { text: 'For sale' }), h('div', { class: 'scroll' }, h('table', { class: 'inv' }, stock.map(iid => { const it = item(iid), ok = canUse(buyer, it); return h('tr', { class: ok ? '' : 'unusable' },
           h('td', { text: it.name }), h('td', { class: 'note', text: itemDesc(it) + (ok ? '' : ' · not usable') }), h('td', { class: 'num', text: it.cost + ' gp' }),
           h('td', null, h('button', { class: 'btn mini', text: 'Buy', disabled: G.gold < it.cost, onclick: () => {
             G.gold -= it.cost; buyer.inv.push(iid); msg = buyer.name + ' buys ' + it.name + '.';

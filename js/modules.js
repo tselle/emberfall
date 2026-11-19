@@ -31,8 +31,6 @@ Object.assign(ITEMS, {
   keepKey:      { name: 'Black Iron Key', t: 'q', cost: 0 },
   patrolBadge:  { name: 'Lost Patrol\'s Badges', t: 'q', cost: 0 },
 });
-SHOPS.coldarms = SHOPS.armory.concat(['silverDagger', 'silverMace', 'silverSword', 'silverBow', 'silverSling']);
-SHOPS.fortarms = SHOPS.armory.concat(['silverDagger', 'silverMace', 'silverSword', 'silverBow']);
 SPECIES_ENEMIES.troll = 'Trolls';
 
 /* ---------------- new monsters (2nd Edition Monstrous Manual statistics) ---------------- */
@@ -516,23 +514,23 @@ const MODULES = {
   },
   coldharrow: {
     code: 'E2', name: 'Barrow of the Iron King', lvl: 3, levels: [3, 5], diff: 3, size: 'Medium', length: 'Two to three hours',
-    hub: 'cold_town', maps: ['cold_town', 'cold_mine', 'cold_barrow'], gold: 150, next: 'ravenmoor', shops: { armory: 'coldarms' },
+    hub: 'cold_town', maps: ['cold_town', 'cold_mine', 'cold_barrow'], gold: 150, next: 'ravenmoor', shops: { armory: 'adv2', apothecary: 'advApo2' },
     quests: ['cold_mine', 'cold_king'], side: ['cold_tally'], final: 'cold_king', rumors: COLD_RUMORS,
     names: { town: 'Coldharrow', inn: 'The Pick and Lantern', armory: 'Dunmore\'s Forge', tavern: 'The Broken Shovel', apothecary: 'Mother Ashe\'s Remedies', temple: 'Chapel of the Dawn', hall: 'The Thane\'s Hall', training: 'The Proving Yard', giver: 'Thane Bergen', trainer: 'Swordmaster Kell' },
     blurb: 'A mining town in the cold hills has lost its silver mine to a bugbear warband, and the miners who dug too deep have found something far older. Bugbears and carrion crawlers above; ghasts, wights and a dead king below. Bring silver, and a cleric who can turn undead.',
     intro: 'Coldharrow clings to the hills like a limpet, a town of stone houses and slag heaps that has lived off the Deepcut silver mine for two hundred years.\nA month ago bugbears seized the mine and carried off the night shift. Now, the townsfolk whisper, cold mist seeps up from the shafts at night, and some of the missing miners have been seen walking on the hillside, pale and silent.\nThane Bergen will pay well for anyone who can win back the Deepcut.',
-    hint: 'The Thane\'s Hall has work. Dunmore\'s Forge sells silvered weapons, and you will want them. The mine adit is at the north end of town.',
+    hint: 'The Thane\'s Hall has work. Dunmore\'s Forge sells silvered weapons, and you will want them; Mother Ashe keeps potions and scrolls. The mine adit is at the north end of town.',
     victory: 'The Deepcut rings with picks again, and the barrow is sealed with silver and prayer. Coldharrow names a new seam after your company.\nA rider in the colours of Fort Ravel finds you at the inn. The frontier is burning, the letter says. Trolls on the moors, and a witch behind them...',
     lose: 'The cold takes you in the dark under the hills, and in time you rise again, to stand guard for the Iron King.',
   },
   ravenmoor: {
     code: 'E3', name: 'The Witch-Queen of Ravenmoor', lvl: 5, levels: [5, 7], diff: 4, size: 'Large', length: 'Three hours or more',
-    hub: 'rav_fort', maps: ['rav_fort', 'rav_moor', 'rav_keep', 'rav_pit'], gold: 500, next: null, shops: { armory: 'fortarms' },
+    hub: 'rav_fort', maps: ['rav_fort', 'rav_moor', 'rav_keep', 'rav_pit'], gold: 500, next: null, shops: { armory: 'adv2', apothecary: 'advApo2' },
     quests: ['rav_moor', 'rav_keep', 'rav_witch'], side: ['rav_patrol'], final: 'rav_witch', rumors: RAV_RUMORS,
     names: { town: 'Fort Ravel', inn: 'The Last Watch', armory: 'The Quartermaster', tavern: 'The Raven\'s Rest', apothecary: 'The Surgeon\'s Tent', temple: 'Garrison Chapel', hall: 'The Commander\'s Keep', training: 'The Drill Yard', giver: 'Commander Ysolde', trainer: 'Drillmaster Hagen' },
     blurb: 'A frontier fort stands alone against the moors, where trolls, worgs and hell hounds gather under the raven banner of a renegade sorceress. Cross the burned village of Ravenmoor, storm a giant-held keep, and descend into the Witch-Pit. Trolls regenerate, gargoyles shrug off ordinary steel, and the Witch-Queen throws fireballs. For experienced parties only.',
     intro: 'Fort Ravel is the last outpost of civilised lands, a palisade and a stone keep on the edge of the northern moors.\nThis spring the moor came alive. Trolls burned the village of Ravenmoor. A patrol of twelve went north and never returned. Ravens gather on the walls in their hundreds, and the soldiers say they carry the eyes of Vharra, the Witch-Queen.\nCommander Ysolde has sent for the best adventurers in the south. That means you.',
-    hint: 'Report to the Commander\'s Keep for orders. The quartermaster sells silvered weapons; the gargoyles of the keep need magic. The moor gate is at the south end of the fort.',
+    hint: 'Report to the Commander\'s Keep for orders. The quartermaster sells silvered and enchanted weapons; the gargoyles of the keep need magic. The surgeon\'s tent keeps potions and scrolls. The moor gate is at the south end of the fort.',
     victory: 'The ravens leave the moor in a great black cloud and do not come back. Fort Ravel flies your colours from its walls.\nYour company has finished the Emberwild saga. You may keep exploring, or begin a new tale.',
     lose: 'The moor takes you, as it has taken so many. The ravens are patient. They will pick your bones clean.',
   },
