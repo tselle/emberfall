@@ -14,6 +14,7 @@ function mapMarks() {
   X.cells.forEach((row, y) => row.forEach((ch, x) => {
     if (ch >= 'a' && ch <= 'z') { const ev = X.def.ev[ch]; if (ev && ev.type === 'chest' && !G.flags[G.map + ':' + ch]) out.push({ x, y, kind: 'chest' }); }
   }));
+  for (const k in X.def.traps || {}) { const [x, y] = k.split(',').map(Number); if (G.flags[trapKey(x, y)] === 'found') out.push({ x, y, kind: 'trap' }); }
   return out.concat(foeMarks());
 }
 function mapOpts(big) {
@@ -41,6 +42,7 @@ function mapInfoAt(x, y) {
   else if (ch === 'F') parts.push('A fountain');
   else if (ch === 'T') parts.push('A tree');
   else if (ch >= 'a' && ch <= 'z' && X.def.ev[ch] && X.def.ev[ch].type === 'chest' && !G.flags[G.map + ':' + ch]) parts.push('A chest, unopened');
+  if (trapAt(x, y) && G.flags[trapKey(x, y)] === 'found') parts.push('A ' + TRAP_KINDS[trapAt(x, y).kind].name + ' (found; the company steps around it)');
   const foe = foeAt(x, y);
   if (foe && foeSeen(foe)) parts.push('Foes: ' + band(foe).map(([id, n]) => (n > 1 ? n + ' × ' : '') + MONSTERS[id].name).join(', '));
   const g = groundAt(x, y);
@@ -100,6 +102,7 @@ function mapDialog() {
     for (const id in LOC_COL) if (has[id]) keys.push(key(LOC_COL[id], locName(id)));
     if (mapMarks().some(m => m.kind === 'chest' && seen[m.y * X.M.w + m.x])) keys.push(key(C.chest, 'Chest'));
     if (foeMarks().some(m => seen[m.y * X.M.w + m.x])) keys.push(key(C.foe, 'Monsters', 'dot'));
+    if (mapMarks().some(m => m.kind === 'trap' && seen[m.y * X.M.w + m.x])) keys.push(key(C.trap, 'Trap', 'dot'));
   }
   if (lootSpots().length) keys.push(key(View3D.MAPCOL.loot, 'Dropped gear', 'dot'));
   legend.replaceChildren(...keys);

@@ -124,6 +124,7 @@ Object.assign(MAPS, {
       '#.....###.e.#...g.#.#',
       '#####################',
     ],
+    traps: { '12,5': makeTrap('darts', 1), '13,8': makeTrap('pit', 1) },
     stairs: { '<': { map: 'thornwick', x: 9, y: 3, dir: 2 } },
     ev: {
       a: { type: 'enc', hidden: true, mons: [['rat', 5]], text: 'A split ale barrel heaves and topples. Giant rats pour out of it, squealing.' },
@@ -195,6 +196,7 @@ Object.assign(MAPS, {
       '#..k.####################',
       '#########################',
     ],
+    traps: { '7,9': makeTrap('block', 4), '15,9': makeTrap('pit', 4), '21,12': makeTrap('spear', 4) },
     stairs: { '<': { map: 'cold_town', x: 11, y: 2, dir: 2 }, '>': { map: 'cold_barrow', x: 12, y: 1, dir: 2 } },
     ev: {
       a: { type: 'text', text: 'An ore cart lies on its side, its load spilled across the rails. The timbers are gouged with axe-marks, and dark stains lead away into the tunnels. Whatever took the Deepcut took it by force.' },
@@ -237,6 +239,7 @@ Object.assign(MAPS, {
       '#########.......#########',
       '#########################',
     ],
+    traps: { '12,7': makeTrap('blade', 5), '8,6': makeTrap('gas', 5), '19,18': makeTrap('block', 5) },
     stairs: { '<': { map: 'cold_mine', x: 10, y: 18, dir: 0 } },
     ev: {
       a: { type: 'text', text: 'The miners broke through into something old. The walls are dry-laid stone, painted with faded frescoes: a king in iron mail, his armies, his enemies kneeling. In the last panel the king lies in his tomb, and his guards lie down around him with their swords.\nBeneath it someone has scratched, fresh: SILVER. ONLY SILVER HURTS THEM.' },
@@ -343,6 +346,7 @@ Object.assign(MAPS, {
       '#########...<...#########',
       '#########################',
     ],
+    traps: { '5,10': makeTrap('fire', 6), '19,10': makeTrap('spear', 6), '8,13': makeTrap('block', 6) },
     stairs: { '<': { map: 'rav_moor', x: 19, y: 18, dir: 3 }, '>': { map: 'rav_pit', x: 12, y: 16, dir: 0 } },
     ev: {
       a: { type: 'enc', hidden: true, mons: [['gargoyle', 2]], text: 'The two stone figures crouched above the inner gate are not statues. They unfold their wings with a sound like grinding millstones.' },
@@ -382,6 +386,7 @@ Object.assign(MAPS, {
       '###########.<.###########',
       '#########################',
     ],
+    traps: { '8,9': makeTrap('fire', 7), '16,9': makeTrap('gas', 7), '21,11': makeTrap('pit', 7) },
     stairs: { '<': { map: 'rav_keep', x: 17, y: 1, dir: 2 } },
     ev: {
       a: { type: 'text', text: 'The stair ends in a cavern that stinks of brimstone and old blood. Raven skulls hang from strings, clicking in a wind you cannot feel. A woman\'s voice echoes from everywhere at once: "Fort Ravel sends its best? How sweet. Come down, little heroes. Come all the way down."' },

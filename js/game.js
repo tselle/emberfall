@@ -278,6 +278,7 @@ async function arrive(px, py) {
     enterMap(); log('— ' + X.def.name + ' —', 'round'); saveGame('auto');
     return;
   }
+  if (trapAt(G.x, G.y) && await stepOnTrap(G.x, G.y)) return;
   if (groundAt().length) await lootHere();
   if (await watchStep(px, py)) return;
   if (ch >= 'a' && ch <= 'z' && def.ev[ch]) return runEvent(ch, def.ev[ch], px, py);
@@ -425,12 +426,68 @@ function search() {
   if (busy()) return;
   G.time += 10; tickEffects();
   let found = false;
+  const up = P().filter(c => c.hp > 0 && !c.dead), thief = bestThief();
   for (const [dx, dy] of DIRS) {
     const x = G.x + dx, y = G.y + dy;
-    if (cell(x, y) === 'S' && P().some(c => c.hp > 0 && !c.dead && rnd(6) <= ((c.race === 'elf' || c.race === 'halfelf') ? 2 : 1))) { setMod(x, y, 'D'); found = true; log('Your search reveals a secret door!', 'good'); }
+    if (cell(x, y) === 'S' && up.some(c => rnd(6) <= ((c.race === 'elf' || c.race === 'halfelf') ? 2 : 1))) { setMod(x, y, 'D'); found = true; log('Your search reveals a secret door!', 'good'); }
+    // a thief finds traps by skill; anyone may stumble on one (dwarves know stonework)
+    const t = trapAt(x, y);
+    if (t && !G.flags[trapKey(x, y)] && ((thief && rnd(100) <= thiefSkills(thief).ft) || up.some(c => rnd(6) <= (c.race === 'dwarf' ? 2 : 1)))) {
+      found = true;
+      const name = TRAP_KINDS[t.kind].name;
+      if (thief && rnd(100) <= thiefSkills(thief).ft) { G.flags[trapKey(x, y)] = 'off'; log('Your search turns up a ' + name + ' ahead. ' + thief.name + ' disarms it.', 'good'); }
+      else { G.flags[trapKey(x, y)] = 'found'; log('Your search turns up a ' + name + ' ahead. It is marked on your map, and the company will step around it.', 'good'); }
+    }
   }
   if (!found) log('You search for ten minutes and find nothing.', 'dim');
+  if (!isWild()) draw();
   refreshAll();
+}
+
+/* ---------------- traps on the floor ----------------
+   G.flags[trapKey]: 'found' (known; the company steps around it) or 'off' (disarmed or already sprung). */
+const trapAt = (x, y) => X.def && X.def.traps && X.def.traps[x + ',' + y];
+const trapKey = (x, y) => G.map + ':trap:' + x + ',' + y;
+const bestThief = () => P().filter(c => c.cls === 'T' && c.hp > 0 && !c.dead).sort((a, b) => thiefSkills(b).ft - thiefSkills(a).ft)[0];
+/* the company steps onto a trap. Returns true if that ended the game. */
+async function stepOnTrap(x, y) {
+  const t = trapAt(x, y), key = trapKey(x, y), K = TRAP_KINDS[t.kind], state = G.flags[key];
+  if (state === 'off') return false;
+  if (state === 'found') { log('You step carefully around the ' + K.name + '.', 'dim'); return false; }
+  X.lock = true;
+  try {
+    G.flags[key] = 'off';
+    // a thief at the front gets a chance to see it just in time, then to disarm it
+    const thief = bestThief();
+    if (thief) {
+      const ft = thiefSkills(thief).ft;
+      if (rnd(100) <= ft) {
+        if (rnd(100) <= ft) { await msgBox('Trap!', thief.name + ' throws out an arm: "Stop!" A ' + K.name + ' is hidden here. A few careful minutes later it is disarmed. (Find/Remove Traps ' + ft + '%)'); return false; }
+        await msgBox('Trap!', thief.name + ' spots a ' + K.name + ' and kneels to disarm it, but the mechanism slips.');
+      }
+    }
+    const up = P().filter(c => c.hp > 0 && !c.dead);
+    const lines = [];
+    if (K.all) {
+      lines.push(K.text);
+      for (const c of up) {
+        let dmg = rollDice(t.dmg);
+        const saved = rnd(20) >= charSave(c, K.save, { poison: K.save === 0 });
+        if (saved) dmg = Math.floor(dmg / 2);
+        harm(c, dmg);
+        lines.push(c.name + (saved ? ' partly avoids it and' : '') + ' takes ' + dmg + ' damage' + (c.dead ? ' and dies!' : c.hp <= 0 ? ' and collapses!' : '.'));
+      }
+    } else {
+      const v = K.one === 'front' ? up[0] : pick(up), dmg = rollDice(t.dmg);
+      harm(v, dmg);
+      lines.push(K.text + ' ' + v.name + '! ' + v.name + ' takes ' + dmg + ' damage' + (v.dead ? ' and dies!' : v.hp <= 0 ? ' and collapses!' : '.'));
+    }
+    log('A ' + K.name + ' is sprung!', 'bad');
+    refreshAll();
+    await msgBox('Trap!', lines.join('\n'));
+    if (partyDown()) { gameOver(); return true; }
+    return false;
+  } finally { X.lock = false; }
 }
 /* ---------------- camping ---------------- */
 const CAMP_MAX = 14; // the most rests in a row "Rest until healed" will take

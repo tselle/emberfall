@@ -270,6 +270,7 @@ const MAPS = {
       '##########.....##########',
       '#########################',
     ],
+    traps: { '12,8': makeTrap('pit', 2), '4,9': makeTrap('darts', 2), '19,9': makeTrap('spear', 2) },
     stairs: { '<': { map: 'town', x: 12, y: 2, dir: 2 }, '>': { map: 'crypt2', x: 12, y: 18, dir: 0 } },
     lockText: 'A door of black iron bars the way south. Its lock is the size of a fist.',
     ev: {
@@ -289,9 +290,9 @@ const MAPS = {
     grid: [
       '#########################',
       '#########################',
-      '########....k....########',
-      '########.........########',
-      '########....j....########',
+      '###...##....k....########',
+      '###.l.##.........########',
+      '####S###....j....########',
       '##.....#.........#.....##',
       '##..e..#.........#..g..##',
       '##.....#.........#.....##',
@@ -309,6 +310,7 @@ const MAPS = {
       '##########.....##########',
       '#########################',
     ],
+    traps: { '12,13': makeTrap('pit', 3), '7,12': makeTrap('darts', 3), '17,12': makeTrap('gas', 3) },
     stairs: { '<': { map: 'crypt1', x: 12, y: 18, dir: 0 } },
     ev: {
       a: { type: 'enc', hidden: true, mons: [['skeleton', 5]], text: 'Bones are stacked to the ceiling in this ossuary. Five heaps rattle, assemble, and stand.' },
@@ -323,6 +325,7 @@ const MAPS = {
       j: { type: 'enc', mons: [['malvek', 1], ['skeleton', 4], ['adept', 1]], quest: 'malvek', items: ['ringProt', 'bracers6', 'staff1'], arena: 'sanctum',
            text: 'Ash drifts like snow in the sanctum. A gaunt man in violet robes turns from a circle of bones. "More clay for my hands," says Malvek the Ashen. "Rise, my children."' },
       k: { type: 'chest', gold: 900, items: ['potExtra', 'scroll:lightningBolt', 'scroll:haste'], text: 'Malvek\'s coffers, heavy with the wealth of the dead.' },
+      l: { type: 'chest', gold: 160, items: ['potExtra', 'antidote'], text: 'Behind the secret door, a monk\'s hidden cell: a cot, a prayer-rope, and a strongbox the cult never found.' },
     },
   },
   /* ---- Overland: one square is one mile.
@@ -397,6 +400,7 @@ const MAPS = {
       '#########<#########',
       '###################',
     ],
+    traps: { '9,8': makeTrap('spear', 2), '4,5': makeTrap('pit', 2) },
     stairs: { '<': { map: 'wild', x: 36, y: 9 } },
     ev: {
       a: { type: 'enc', mons: [['gnoll', 3]], text: 'Hyena-headed giants lounge in the gatehouse passage, gnawing on bones. They lurch upright with yelping war-cries.' },

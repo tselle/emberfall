@@ -382,6 +382,67 @@ const ADVENTURES = (() => {
     return { name: o.wildName, overland: true, rumors, enc, colors: pk(R, PALETTES) || undefined, travellers: 'A family on the road to ' + o.town + ' shares bread and the news.', grid: g.map(r => r.join('')), sites };
   }
 
+  /* ---------------- secrets and traps on a dungeon level ----------------
+     One to three secret doors, each opening on an alcove cut into the rock behind a wall (the first always hides a
+     chest), and two or three traps, on corridor squares where it can, away from the stairs. Uses its own random stream. */
+  const SECRET_TEXT = ['Behind the secret door, a cramped niche: someone hid their valuables here and never came back for them.',
+    'A hidden closet, thick with dust. A strongbox sits on the floor where its owner left it.', 'A secret cache, sealed off long ago. The air inside is stale and still.',
+    'A priest-hole, just big enough for one. Whoever hid here left something behind.'];
+  function secretsAndTraps(R, g, ev, L) {
+    const H = g.length, W = g[0].length, inside = (x, y) => x > 0 && y > 0 && x < W - 1 && y < H - 1;
+    const rock = (x, y) => inside(x, y) && g[y][x] === '#';
+    const free = 'abcdefghijklmnopqrstuvwxyz'.split('').filter(c => !ev[c]);
+    // alcoves: wall square w with floor on one side and two squares of untouched rock behind it
+    const alcoves = [];
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) for (const [dx, dy] of D4) {
+      if (g[y][x] !== '#' || (g[y - dy] || [])[x - dx] !== '.') continue;
+      const px = dy !== 0 ? 1 : 0, py = dx !== 0 ? 1 : 0;
+      if (!rock(x + px, y + py) || !rock(x - px, y - py)) continue;
+      const cells = [[x + dx, y + dy], [x + 2 * dx, y + 2 * dy]];
+      let ok = cells.every(([cx, cy]) => rock(cx, cy));
+      for (const [cx, cy] of cells) for (let oy = -1; oy <= 1 && ok; oy++) for (let ox = -1; ox <= 1 && ok; ox++) {
+        const nx = cx + ox, ny = cy + oy;
+        if (nx === x && ny === y) continue;
+        if (!inside(nx, ny) && !(g[ny] && g[ny][nx] === '#')) ok = false;
+        else if (g[ny][nx] !== '#') ok = false;
+      }
+      if (ok) alcoves.push({ x, y, cells });
+    }
+    const n = ri(R, 1, 3), used = [];
+    for (let i = 0; i < n && alcoves.length; i++) {
+      const pool = alcoves.filter(a => used.every(u => Math.abs(u.x - a.x) + Math.abs(u.y - a.y) >= 5 && a.cells.every(([cx, cy]) => u.cells.every(([ux, uy]) => Math.abs(ux - cx) > 1 || Math.abs(uy - cy) > 1))));
+      if (!pool.length) break;
+      const a = pk(R, pool); used.push(a);
+      g[a.y][a.x] = 'S';
+      a.cells.forEach(([cx, cy]) => { g[cy][cx] = '.'; });
+      if ((i === 0 || R() < 0.5) && free.length) {
+        const ch = free.shift(), [cx, cy] = a.cells[1], loot = Treasure.roll(R, L, 'cache');
+        g[cy][cx] = ch; ev[ch] = { type: 'chest', gold: loot.gold, items: loot.items, text: pk(R, SECRET_TEXT) };
+      }
+    }
+    // failing an alcove, a secret door in a wall between two passages
+    if (!used.length) {
+      const spots = [];
+      for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (g[y][x] === '#')
+        for (const [dx, dy] of [[1, 0], [0, 1]]) if (g[y - dy][x - dx] === '.' && g[y + dy][x + dx] === '.' && rock(x + dy, y + dx) && rock(x - dy, y - dx)) spots.push([x, y]);
+      if (spots.length) { const [x, y] = pk(R, spots); g[y][x] = 'S'; }
+    }
+    // traps
+    const near = (x, y) => { for (let oy = -2; oy <= 2; oy++) for (let ox = -2; ox <= 2; ox++) { const c = (g[y + oy] || [])[x + ox]; if (c === '<' || c === '>' || c === 'S') return true; } return false; };
+    const openN = (x, y) => D4.filter(([dx, dy]) => g[y + dy] && g[y + dy][x + dx] && g[y + dy][x + dx] !== '#').length;
+    const floor = []; for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (g[y][x] === '.' && !near(x, y)) floor.push([x, y]);
+    const halls = floor.filter(([x, y]) => openN(x, y) === 2);
+    const traps = {}, kinds = L < 3 ? ['pit', 'darts', 'blade', 'spear'] : Object.keys(TRAP_KINDS), want = ri(R, 2, 3), at = [];
+    for (let i = 0; i < want; i++) {
+      const spaced = list => list.filter(([x, y]) => at.every(([ax, ay]) => Math.abs(ax - x) + Math.abs(ay - y) >= 6));
+      const choices = spaced(halls).length ? spaced(halls) : spaced(floor);
+      if (!choices.length) break;
+      const [x, y] = pk(R, choices); at.push([x, y]);
+      traps[x + ',' + y] = makeTrap(pk(R, kinds), L);
+    }
+    return traps;
+  }
+
   /* ---------------- one adventure ---------------- */
   const usedTowns = new Set(Object.keys(MODULES).map(k => MODULES[k].names.town)), usedTitles = new Set();
   function build(tier, band, idx, themeKey, sizeKey) {
@@ -484,6 +545,9 @@ const ADVENTURES = (() => {
         wander: { chance: 0.03, table: (wand.length ? wand : pool.slice(0, 2)).map(m => [m, clampN(Math.round(budget(L) * 0.5 / weight(m)), 1, 6) > 1 ? '1d' + clampN(Math.round(budget(L) * 0.5 / weight(m)), 2, 6) : 1]) },
         ev, _g: g, stairs: {} };
     }
+    // secret doors and traps, on a random stream of their own so the rest of each level is as it was
+    const R3 = rng(7919 * (tier + 1) + 104729 * (idx + 1) + themeKey.length * 31 + 32452843);
+    for (let j = 0; j < D; j++) { const m = maps[lvlIds[j]]; m.traps = secretsAndTraps(R3, m._g, m.ev, levelOf(j)); }
     // stairs between the levels and the town
     const find = (g, ch) => { for (let y = 0; y < g.length; y++) { const x = g[y].indexOf(ch); if (x >= 0) return [x, y]; } return null; };
     const townStair = village ? { x: 9, y: 3, dir: 2 } : { x: 11, y: 2, dir: 2 };

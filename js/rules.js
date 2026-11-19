@@ -254,6 +254,23 @@ const TURN_ORDER = ['skeleton', 'zombie', 'ghoul', 'shadow', 'wight', 'ghast', '
 function turnLevel(ch) { return ch.cls === 'C' ? ch.lvl : ch.cls === 'P' ? ch.lvl - 2 : 0; }
 
 /* ---- Thief skills (PHB Tables 26-28) ---- */
+/* ---------------- traps on the floor of a dungeon ----------------
+   A map lists them as def.traps: { 'x,y': trap }. Each is hidden until searched out or sprung.
+   One-victim traps strike a single character (the front of the company for a pit); the rest catch everyone,
+   and a saving throw (save: 0 poison, 3 breath) halves the damage. Damage grows with the level of the dungeon. */
+const TRAP_KINDS = {
+  pit:    { name: 'pit', one: 'front', text: 'The floor tips away underfoot! A hidden pit opens beneath' },
+  darts:  { name: 'dart trap', one: 'any', text: 'A plate clicks underfoot, and darts hiss out of holes in the wall at' },
+  blade:  { name: 'scything blade', one: 'any', text: 'A blade scythes out of a slot in the wall at' },
+  spear:  { name: 'spear trap', one: 'front', text: 'Spears punch up through the floor at' },
+  block:  { name: 'falling stones', all: true, save: 3, text: 'A tripwire snaps, and stones crash down from the ceiling!' },
+  fire:   { name: 'fire rune', all: true, save: 3, text: 'A rune flares on the flagstone, and fire roars up around the company!' },
+  gas:    { name: 'poison gas', all: true, save: 0, text: 'A hiss, and a yellow cloud of choking gas fills the passage!' },
+};
+function makeTrap(kind, L) {
+  const k = TRAP_KINDS[kind];
+  return { kind, dmg: k.all ? Math.max(1, Math.round(L / 3)) + 'd6' : Math.max(1, Math.round(L / 2)) + 'd6' };
+}
 function thiefSkills(ch) {
   const t = { ol: 10, ft: 5, ms: 10, hs: 5, hn: 15 + ({ dwarf: 15, gnome: 10, elf: 5, halfelf: 5, halfling: 5 }[ch.race] || 0) };
   const r = RACES[ch.race].th;
