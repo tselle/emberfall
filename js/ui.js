@@ -614,10 +614,11 @@ function hallDialog() {
     if (holder) holder.inv.splice(holder.inv.indexOf(q.needItem), 1);
     G.quests[ready] = 'done'; G.gold += q.gold;
     jot('Commission complete: ' + q.name + '. ' + giver + ' paid ' + q.gold + ' gold.', 'quest');
-    live().forEach(c => awardXP(c, q.xp));
-    log('Commission complete: ' + q.name + '. +' + q.gold + ' gp, +' + q.xp + ' XP each.', 'good');
+    const xp = questXP(q);
+    live().forEach(c => awardXP(c, xp));
+    log('Commission complete: ' + q.name + '. +' + q.gold + ' gp, +' + xp + ' XP each.', 'good');
     saveGame('auto'); refreshAll();
-    msgBox('Commission Complete: ' + q.name, '"' + q.done + '"\nThe party receives ' + q.gold + ' gold. Each member gains ' + q.xp + ' experience.').then(() => {
+    msgBox('Commission Complete: ' + q.name, '"' + q.done + '"\nThe party receives ' + q.gold + ' gold. Each member gains ' + xp + ' experience.').then(() => {
       if (ready === M.final) moduleComplete();
       else hallDialog();
     });

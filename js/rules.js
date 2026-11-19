@@ -332,6 +332,9 @@ function newCharacter(o) {
 function startingGold(cls) { return rollDice(CLASSES[cls].gold) * 10; }
 
 /* ---- Experience ---- */
+// Commissions pay this share of the experience listed in QUESTS, rounded to the nearest 5.
+const QUEST_XP_RATE = 0.25;
+function questXP(q) { return Math.max(5, Math.round(q.xp * QUEST_XP_RATE / 5) * 5); }
 function xpForNext(ch) { return ch.lvl >= MAX_LEVEL ? Infinity : CLASSES[ch.cls].xp[ch.lvl]; }
 function awardXP(ch, amt) {
   if (CLASSES[ch.cls].prime.every(a => ch[a] >= 16)) amt = Math.floor(amt * 1.1); // prime requisite bonus
